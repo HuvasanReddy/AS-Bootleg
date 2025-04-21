@@ -334,6 +334,7 @@ def batch_process():
                         user_id=current_user.id
                     )
                     db.session.add(project)
+                    db.session.flush()  # Ensure project.id is assigned
                     
                     # Save file information
                     project_file = ProjectFile(
