@@ -7,27 +7,23 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
-    libmagic1 \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender1 \
+    libpq-dev \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 
 # Upgrade pip and install Python dependencies
-RUN pip install --upgrade pip && \
+RUN python -m pip install --upgrade pip && \
+    pip install wheel setuptools && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application
 COPY . .
 
-# Create necessary directories with proper permissions
-RUN mkdir -p uploads/exports && \
-    chmod -R 777 uploads
+# Create necessary directories
+RUN mkdir -p uploads/exports uploads/user_templates
 
 # Set environment variables
 ENV FLASK_APP=app.py

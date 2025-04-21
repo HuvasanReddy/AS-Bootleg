@@ -12,5 +12,6 @@ psycopg2-binary==2.9.9
 psd-tools==1.10.7
 opencv-python==4.8.0
 numpy==1.23.0
-setuptools>=65.5.1
-wheel>=0.38.4 
+setuptools==65.5.1
+wheel==0.38.4
+python-magic-bin==0.4.14 
