@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+# Temporarily comment out login imports
+# from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_migrate import Migrate
 from flask_cors import CORS
 from flask_marshmallow import Marshmallow
@@ -69,12 +70,14 @@ def internal_error(error):
 def not_found_error(error):
     return render_template('error.html', error="Page not found"), 404
 
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
+# Comment out login manager initialization
+# login_manager = LoginManager()
+# login_manager.init_app(app)
+# login_manager.login_view = 'login'
+# login_manager.login_message = 'Please log in to access this page.'
 
-# User model
-class User(UserMixin, db.Model):
+# User model (keep for database structure)
+class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
@@ -93,7 +96,7 @@ class Project(db.Model):
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # Make nullable
     files = db.relationship('ProjectFile', backref='project', lazy=True)
 
 # ProjectFile model
@@ -104,92 +107,37 @@ class ProjectFile(db.Model):
     file_type = db.Column(db.String(50), nullable=False)
     upload_date = db.Column(db.DateTime, default=datetime.utcnow)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
-    filepath = db.Column(db.String(200))  # Add filepath column
+    filepath = db.Column(db.String(200))
     layers = db.Column(db.Text)  # JSON string of layer data
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        email = request.form.get('email')
-        password = request.form.get('password')
-        
-        if User.query.filter_by(username=username).first():
-            flash('Username already exists')
-            return redirect(url_for('register'))
-        
-        if User.query.filter_by(email=email).first():
-            flash('Email already registered')
-            return redirect(url_for('register'))
-        
-        user = User(username=username, email=email)
-        user.set_password(password)
-        db.session.add(user)
-        db.session.commit()
-        
-        flash('Registration successful! Please login.')
-        return redirect(url_for('login'))
-    
-    return render_template('register.html')
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        user = User.query.filter_by(username=username).first()
-        
-        if user and user.check_password(password):
-            login_user(user)
-            return redirect(url_for('dashboard'))
-        
-        flash('Invalid username or password')
-    return render_template('login.html')
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for('index'))
-
 @app.route('/dashboard')
-@login_required
 def dashboard():
-    projects = Project.query.filter_by(user_id=current_user.id).all()
+    # Get all projects instead of user-specific ones
+    projects = Project.query.all()
     return render_template('dashboard.html', projects=projects)
 
 @app.route('/project/new', methods=['POST'])
-@login_required
 def create_project():
     name = request.form.get('name')
     description = request.form.get('description')
     
-    project = Project(name=name, description=description, user_id=current_user.id)
+    # Create project without user_id
+    project = Project(name=name, description=description)
     db.session.add(project)
     db.session.commit()
     
     return redirect(url_for('project', project_id=project.id))
 
 @app.route('/project/<int:project_id>')
-@login_required
 def project(project_id):
     project = Project.query.get_or_404(project_id)
-    if project.user_id != current_user.id:
-        flash('You do not have permission to view this project')
-        return redirect(url_for('dashboard'))
-    
     return render_template('project.html', project=project)
 
 @app.route('/project/<int:project_id>/upload', methods=['POST'])
-@login_required
 def upload_file(project_id):
     try:
         # Validate request data
@@ -201,8 +149,6 @@ def upload_file(project_id):
         return jsonify(err.messages), 400
 
     project = Project.query.get_or_404(project_id)
-    if project.user_id != current_user.id:
-        return jsonify({'error': 'Unauthorized'}), 403
     
     file = data['file']
     if file.filename == '':
@@ -219,18 +165,18 @@ def upload_file(project_id):
             layers = process_document(tmp.name)
             
             if isinstance(layers, dict) and 'error' in layers:
-                os.unlink(tmp.name)  # Clean up the temporary file
+                os.unlink(tmp.name)
                 return jsonify({'error': layers['error']}), 400
             
-            # Generate unique filename for permanent storage
+            # Generate unique filename
             filename = secure_filename(file.filename)
             unique_filename = f"{uuid.uuid4()}_{filename}"
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
             
-            # Move the temporary file to permanent storage
+            # Move the temporary file
             shutil.move(tmp.name, file_path)
             
-            # Save file information to database
+            # Save file information
             project_file = ProjectFile(
                 filename=unique_filename,
                 original_filename=filename,
@@ -249,26 +195,18 @@ def upload_file(project_id):
                 'layers': layers
             })
     except Exception as e:
-        # Ensure temporary file is cleaned up in case of error
         if 'tmp' in locals() and os.path.exists(tmp.name):
             os.unlink(tmp.name)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/project/<int:project_id>/file/<int:file_id>/layers', methods=['GET'])
-@login_required
 def get_file_layers(project_id, file_id):
     project_file = ProjectFile.query.get_or_404(file_id)
-    if project_file.project_id != project_id or project_file.project.user_id != current_user.id:
-        return jsonify({'error': 'Unauthorized'}), 403
-    
     return jsonify(json.loads(project_file.layers))
 
 @app.route('/project/<int:project_id>/file/<int:file_id>/export', methods=['POST'])
-@login_required
 def export_file(project_id, file_id):
     project_file = ProjectFile.query.get_or_404(file_id)
-    if project_file.project_id != project_id or project_file.project.user_id != current_user.id:
-        return jsonify({'error': 'Unauthorized'}), 403
     
     layer_data = request.json.get('layers', [])
     if not layer_data:
@@ -279,7 +217,7 @@ def export_file(project_id, file_id):
         lm = LayerManager()
         lm.load_document(project_file.filepath)
         
-        # Update layers with the provided data
+        # Update layers
         for layer in layer_data:
             if layer['id'] in lm._layers:
                 lm._layers[layer['id']].update(layer)
@@ -300,7 +238,6 @@ def export_file(project_id, file_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/batch-process', methods=['POST'])
-@login_required
 def batch_process():
     try:
         # Validate request data
@@ -327,29 +264,28 @@ def batch_process():
                     processor = DocumentProcessor()
                     layers = processor.process_file(tmp.name)
                     
-                    # Convert image content to base64 if needed
+                    # Convert image content to base64
                     for layer in layers:
                         if 'content' in layer and isinstance(layer['content'], (bytes, bytearray)):
                             layer['content'] = base64.b64encode(layer['content']).decode('utf-8')
                         if 'locked' not in layer:
                             layer['locked'] = False
                     
-                    # Generate unique filename for permanent storage
+                    # Generate unique filename
                     filename = secure_filename(file.filename)
                     unique_filename = f"{uuid.uuid4()}_{filename}"
                     file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
                     
-                    # Move the temporary file to permanent storage
+                    # Move the temporary file
                     shutil.move(tmp.name, file_path)
                     
-                    # Create project with description
+                    # Create project
                     project = Project(
                         name=filename,
-                        description=f"Batch processed file: {filename}",
-                        user_id=current_user.id
+                        description=f"Batch processed file: {filename}"
                     )
                     db.session.add(project)
-                    db.session.flush()  # Ensure project.id is assigned
+                    db.session.flush()
                     
                     # Save file information
                     project_file = ProjectFile(
@@ -369,7 +305,6 @@ def batch_process():
                         'file_id': project_file.id
                     })
             except Exception as e:
-                # Ensure temporary file is cleaned up in case of error
                 if 'tmp' in locals() and os.path.exists(tmp.name):
                     os.unlink(tmp.name)
                 results.append({
@@ -382,7 +317,6 @@ def batch_process():
     return jsonify({'results': results})
 
 @app.route('/api/update-layer', methods=['POST'])
-@login_required
 def update_layer():
     try:
         # Validate request data
@@ -391,15 +325,11 @@ def update_layer():
         return jsonify(err.messages), 400
     
     try:
-        # Verify permissions
         project_file = ProjectFile.query.get_or_404(data['file_id'])
         
         # Verify project_id matches
         if data['project_id'] != project_file.project_id:
             return jsonify({'error': 'Bad project_id'}), 400
-            
-        if project_file.project.user_id != current_user.id:
-            return jsonify({'error': 'Unauthorized'}), 403
         
         # Load document and update layer
         lm = LayerManager()
@@ -422,6 +352,25 @@ def update_layer():
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.before_first_request
+def initialize_database():
+    try:
+        db.create_all()
+        # Check if admin user exists, if not create one
+        admin = User.query.filter_by(username='admin').first()
+        if not admin:
+            admin = User(
+                username='admin',
+                email='admin@example.com'
+            )
+            admin.set_password('admin123')
+            db.session.add(admin)
+            db.session.commit()
+            logger.info("Admin user created successfully")
+    except Exception as e:
+        logger.error(f"Database initialization error: {str(e)}")
+        db.session.rollback()
 
 if __name__ == '__main__':
     with app.app_context():
