@@ -1,55 +1,57 @@
 from psd_tools import PSDImage
-import os
-from PIL import Image
-import numpy as np
-from skimage import measure
 import cv2
+import numpy as np
+from PIL import Image
+import os
 
 class DocumentProcessor:
     @staticmethod
     def process_document(filepath):
-        """Process a document file and extract layer information."""
-        if filepath.lower().endswith('.psd'):
-            return DocumentProcessor._process_psd(filepath)
-        elif filepath.lower().endswith('.indd'):
-            return DocumentProcessor._process_indd(filepath)
-        else:
-            raise ValueError("Unsupported file format")
+        try:
+            if filepath.endswith('.psd'):
+                return DocumentProcessor._process_psd(filepath)
+            elif filepath.endswith('.indd'):
+                return DocumentProcessor._process_indd(filepath)
+            else:
+                return {'error': 'Unsupported file format'}
+        except Exception as e:
+            return {'error': str(e)}
 
     @staticmethod
     def _process_psd(filepath):
-        """Process a PSD file and extract layer information."""
         psd = PSDImage.open(filepath)
         layers = []
         
         for layer in psd:
-            layer_info = {
-                'id': layer.name,
+            layer_data = {
+                'id': str(layer.layer_id),
                 'name': layer.name,
-                'type': DocumentProcessor._determine_layer_type(layer),
-                'bounds': layer.bbox,
-                'locked': layer.locked,
+                'type': 'image' if layer.kind == 'pixel' else 'text',
                 'visible': layer.visible,
-                'opacity': layer.opacity,
-                'blend_mode': layer.blend_mode
+                'bounds': {
+                    'x': layer.offset[0],
+                    'y': layer.offset[1],
+                    'width': layer.width,
+                    'height': layer.height
+                }
             }
             
-            if layer_info['type'] == 'text':
-                layer_info['text'] = layer.text_data.text if hasattr(layer, 'text_data') else ''
-                layer_info['font'] = layer.text_data.font if hasattr(layer, 'text_data') else None
-                layer_info['size'] = layer.text_data.size if hasattr(layer, 'text_data') else None
-                layer_info['color'] = layer.text_data.color if hasattr(layer, 'text_data') else None
+            if layer.kind == 'pixel':
+                layer_data['content'] = layer.topil().tobytes()
+            elif layer.kind == 'type':
+                layer_data['text'] = layer.text_data.text
+                layer_data['font'] = layer.text_data.font
+                layer_data['size'] = layer.text_data.font_size
+                layer_data['color'] = layer.text_data.color
+                
+            layers.append(layer_data)
             
-            layers.append(layer_info)
-        
         return layers
 
     @staticmethod
     def _process_indd(filepath):
-        """Process an InDesign file and extract layer information."""
-        # Note: InDesign processing would require additional libraries
-        # This is a placeholder for future implementation
-        raise NotImplementedError("InDesign processing not yet implemented")
+        # Placeholder for InDesign processing
+        return {'error': 'InDesign processing not implemented'}
 
     @staticmethod
     def _determine_layer_type(layer):
