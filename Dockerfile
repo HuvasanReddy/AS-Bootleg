@@ -4,25 +4,19 @@ FROM python:3.9-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpq-dev \
-    python3-dev \
-    libmagic1 \
-    libopencv-dev \
-    libgl1-mesa-glx \
-    && rm -rf /var/lib/apt/lists/*
-
-# Upgrade pip and install Python dependencies
-RUN python -m pip install --upgrade pip && \
-    pip install wheel setuptools
-
-# Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# System deps for wheels
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libmagic1 libmagic-dev \
+    libjpeg-dev zlib1g-dev libpng-dev libtiff-dev \
+    libgl1-mesa-glx libglib2.0-0 \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --upgrade pip
+RUN pip install wheel setuptools
+RUN pip install --no-cache-dir -r requirements.txt --verbose
 
 # Copy the rest of the application
 COPY . .
@@ -43,4 +37,4 @@ RUN flask db init && \
 EXPOSE 8080
 
 # Run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"] 
+CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:8080"] 
