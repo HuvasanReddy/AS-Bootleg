@@ -21,8 +21,11 @@ from dotenv import load_dotenv
 import base64
 from schemas import UpdateLayerSchema, BatchProcessSchema, UploadFileSchema
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
+# Configure logging with more details
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Load environment variables
@@ -112,7 +115,35 @@ class ProjectFile(db.Model):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    logger.debug("Accessing index route")
+    try:
+        # Test database connection
+        db.session.execute('SELECT 1')
+        logger.debug("Database connection successful")
+        return render_template('index.html')
+    except Exception as e:
+        logger.error(f"Error in index route: {str(e)}")
+        return "Error: Unable to connect to database. Please check logs.", 500
+
+@app.route('/health')
+def health_check():
+    logger.debug("Health check requested")
+    try:
+        # Test database connection
+        db.session.execute('SELECT 1')
+        # Test file system
+        os.access(app.config['UPLOAD_FOLDER'], os.W_OK)
+        return jsonify({
+            "status": "healthy",
+            "database": "connected",
+            "upload_folder": "accessible"
+        })
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return jsonify({
+            "status": "unhealthy",
+            "error": str(e)
+        }), 500
 
 @app.route('/dashboard')
 def dashboard():
@@ -356,6 +387,7 @@ def update_layer():
 @app.before_first_request
 def initialize_database():
     try:
+        logger.info("Initializing database...")
         db.create_all()
         # Check if admin user exists, if not create one
         admin = User.query.filter_by(username='admin').first()
@@ -369,11 +401,18 @@ def initialize_database():
             db.session.commit()
             logger.info("Admin user created successfully")
     except Exception as e:
-        logger.error(f"Database initialization error: {str(e)}")
+        logger.error(f"Database initialization failed: {str(e)}")
         db.session.rollback()
 
 if __name__ == '__main__':
     with app.app_context():
-        db.create_all()
+        try:
+            logger.info("Initializing database...")
+            db.create_all()
+            logger.info("Database initialized successfully")
+        except Exception as e:
+            logger.error(f"Database initialization failed: {str(e)}")
+            
     port = int(os.getenv('PORT', 8080))
-    app.run(host='0.0.0.0', port=port) 
+    logger.info(f"Starting application on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=True) 

@@ -19,10 +19,30 @@
                 }
             }
         }
+
+        // Add loading indicator
+        document.addEventListener('DOMContentLoaded', function() {
+            const loadingIndicator = document.getElementById('loading-indicator');
+            if (loadingIndicator) {
+                loadingIndicator.style.display = 'none';
+            }
+        });
+
+        window.addEventListener('load', function() {
+            const loadingIndicator = document.getElementById('loading-indicator');
+            if (loadingIndicator) {
+                loadingIndicator.style.display = 'none';
+            }
+        });
     </script>
     {% block extra_head %}{% endblock %}
 </head>
-<body class="bg-light min-h-screen">
+<body class="bg-gray-100">
+    <!-- Loading indicator -->
+    <div id="loading-indicator" class="fixed top-0 left-0 w-full h-full bg-white bg-opacity-75 z-50 flex items-center justify-center">
+        <div class="animate-spin rounded-full h-32 w-32 border-b-2 border-indigo-600"></div>
+    </div>
+
     <nav class="bg-white shadow-lg">
         <div class="max-w-7xl mx-auto px-4">
             <div class="flex justify-between h-16">
@@ -107,6 +127,12 @@
                 }
             });
         }
+
+        // Error handler
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            console.error('Error: ' + msg + '\nURL: ' + url + '\nLine: ' + lineNo + '\nColumn: ' + columnNo + '\nError object: ' + JSON.stringify(error));
+            return false;
+        };
     </script>
     {% block extra_js %}{% endblock %}
 </body>

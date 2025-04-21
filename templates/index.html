@@ -3,115 +3,21 @@
 {% block title %}Creative Automation Tool{% endblock %}
 
 {% block content %}
-<div class="relative">
-    <!-- Hero Section -->
-    <div class="relative bg-primary">
-        <div class="absolute inset-0">
-            <img class="w-full h-full object-cover" src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80" alt="Creative background">
-            <div class="absolute inset-0 bg-primary mix-blend-multiply"></div>
-        </div>
-        <div class="relative max-w-7xl mx-auto py-24 px-4 sm:py-32 sm:px-6 lg:px-8">
-            <h1 class="text-4xl font-extrabold tracking-tight text-white sm:text-5xl lg:text-6xl">
-                Creative Automation Tool
-            </h1>
-            <p class="mt-6 text-xl text-white max-w-3xl">
-                Create, edit, and automate your creative projects with AI-powered tools. Perfect for designers, marketers, and content creators.
-            </p>
-            <div class="mt-10">
-                <a href="{{ url_for('register') }}" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-primary bg-white hover:bg-gray-50">
-                    Get Started
-                </a>
-            </div>
-        </div>
-    </div>
-
-    <!-- Features Section -->
-    <div class="py-12 bg-white">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="lg:text-center">
-                <h2 class="text-base text-primary font-semibold tracking-wide uppercase">Features</h2>
-                <p class="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-gray-900 sm:text-4xl">
-                    Everything you need to create amazing content
-                </p>
-            </div>
-
-            <div class="mt-10">
-                <div class="space-y-10 md:space-y-0 md:grid md:grid-cols-2 md:gap-x-8 md:gap-y-10">
-                    <!-- AI-Powered Content Generation -->
-                    <div class="relative">
-                        <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-primary text-white">
-                            <i class="fas fa-magic"></i>
-                        </div>
-                        <div class="ml-16">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">AI-Powered Content Generation</h3>
-                            <p class="mt-2 text-base text-gray-500">
-                                Generate text and images using advanced AI models. Perfect for creating variations and exploring new ideas.
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Layer Management -->
-                    <div class="relative">
-                        <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-primary text-white">
-                            <i class="fas fa-layer-group"></i>
-                        </div>
-                        <div class="ml-16">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">Smart Layer Management</h3>
-                            <p class="mt-2 text-base text-gray-500">
-                                Easily manage and edit layers in your creative projects. Support for PSD and InDesign files.
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Batch Processing -->
-                    <div class="relative">
-                        <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-primary text-white">
-                            <i class="fas fa-tasks"></i>
-                        </div>
-                        <div class="ml-16">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">Batch Processing</h3>
-                            <p class="mt-2 text-base text-gray-500">
-                                Process multiple files at once. Save time by automating repetitive tasks.
-                            </p>
-                        </div>
-                    </div>
-
-                    <!-- Template Management -->
-                    <div class="relative">
-                        <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-primary text-white">
-                            <i class="fas fa-file-alt"></i>
-                        </div>
-                        <div class="ml-16">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900">Template Management</h3>
-                            <p class="mt-2 text-base text-gray-500">
-                                Create and manage templates for your projects. Share templates with your team.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- CTA Section -->
-    <div class="bg-gray-50">
-        <div class="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:py-16 lg:px-8 lg:flex lg:items-center lg:justify-between">
-            <h2 class="text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl">
-                <span class="block">Ready to get started?</span>
-                <span class="block text-primary">Start creating amazing content today.</span>
+<div class="min-h-screen flex items-center justify-center">
+    <div class="max-w-md w-full space-y-8">
+        <div>
+            <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+                Welcome to Creative Automation Tool
             </h2>
-            <div class="mt-8 flex lg:mt-0 lg:flex-shrink-0">
-                <div class="inline-flex rounded-md shadow">
-                    <a href="{{ url_for('register') }}" class="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-white bg-primary hover:bg-primary-dark">
-                        Get started
-                    </a>
-                </div>
-                <div class="ml-3 inline-flex rounded-md shadow">
-                    <a href="#" class="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-primary bg-white hover:bg-gray-50">
-                        Learn more
-                    </a>
-                </div>
-            </div>
+            <p class="mt-2 text-center text-sm text-gray-600">
+                A powerful tool for automating your creative workflows
+            </p>
+        </div>
+        <div class="mt-8 space-y-6">
+            <a href="{{ url_for('dashboard') }}" 
+               class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                Go to Dashboard
+            </a>
         </div>
     </div>
 </div>
