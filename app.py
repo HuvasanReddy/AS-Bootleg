@@ -6,7 +6,8 @@ from werkzeug.utils import secure_filename
 import os
 from datetime import datetime
 import uuid
-from utils.document_processor import DocumentProcessor
+from utils.document_processor import DocumentProcessor, process_document
+from utils.layer_manager import LayerManager
 import json
 from dotenv import load_dotenv
 import base64
@@ -14,14 +15,28 @@ import base64
 # Load environment variables
 load_dotenv()
 
+# Check for required environment variables
+secret_key = os.getenv('SECRET_KEY')
+if not secret_key:
+    raise RuntimeError("SECRET_KEY environment variable is required")
+
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
+app.config['SECRET_KEY'] = secret_key
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['TEMPLATE_UPLOAD_FOLDER'] = os.path.join('uploads', 'user_templates')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
+# Define allowed file extensions
+ALLOWED_EXTENSIONS = {'psd', 'ai', 'indd', 'jpg', 'jpeg', 'png', 'gif'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 # Ensure upload directories exist
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+os.makedirs(app.config['TEMPLATE_UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'exports'), exist_ok=True)
 
 db = SQLAlchemy(app)
@@ -60,6 +75,7 @@ class ProjectFile(db.Model):
     file_type = db.Column(db.String(50), nullable=False)
     upload_date = db.Column(db.DateTime, default=datetime.utcnow)
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    filepath = db.Column(db.String(200))  # Add filepath column
     layers = db.Column(db.Text)  # JSON string of layer data
 
 @login_manager.user_loader
@@ -157,6 +173,9 @@ def upload_file(project_id):
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
     
+    if not allowed_file(file.filename):
+        return jsonify({'error': 'Invalid file type'}), 400
+    
     if file:
         filename = secure_filename(file.filename)
         unique_filename = f"{uuid.uuid4()}_{filename}"
@@ -164,15 +183,11 @@ def upload_file(project_id):
         file.save(file_path)
         
         # Process the file and extract layers
-        processor = DocumentProcessor()
-        layers = processor.process_file(file_path)
+        layers = process_document(file_path)
         
-        # Convert image data to base64 if present
-        for layer in layers:
-            if 'image_data' in layer:
-                layer['image_data'] = base64.b64encode(layer['image_data']).decode('utf-8')
-            if 'locked' not in layer:
-                layer['locked'] = False
+        if isinstance(layers, dict) and 'error' in layers:
+            os.remove(file_path)  # Clean up the file if processing failed
+            return jsonify({'error': layers['error']}), 400
         
         # Save file information to database
         project_file = ProjectFile(
@@ -180,6 +195,7 @@ def upload_file(project_id):
             original_filename=filename,
             file_type=file.content_type,
             project_id=project_id,
+            filepath=file_path,  # Store the filepath
             layers=json.dumps(layers)
         )
         db.session.add(project_file)
@@ -293,6 +309,50 @@ def batch_process():
     
     db.session.commit()
     return jsonify({'results': results})
+
+@app.route('/api/update-layer', methods=['POST'])
+@login_required
+def update_layer():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        project_id = data.get('project_id')
+        file_id = data.get('file_id')
+        layer_id = data.get('layer_id')
+        content = data.get('content')
+        layer_type = data.get('layer_type')
+        
+        if not all([project_id, file_id, layer_id, content, layer_type]):
+            return jsonify({'error': 'Missing required fields'}), 400
+        
+        # Verify permissions
+        project_file = ProjectFile.query.get_or_404(file_id)
+        if project_file.project.user_id != current_user.id:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        # Load document and update layer
+        lm = LayerManager()
+        lm.load_document(project_file.filepath)
+        result = lm.update_layer(layer_id, content, layer_type)
+        
+        if 'error' in result:
+            return jsonify({'error': result['error']}), 400
+        
+        # Update layers in database
+        layers = json.loads(project_file.layers)
+        for i, layer in enumerate(layers):
+            if layer['id'] == layer_id:
+                layers[i] = result['layer']
+                break
+        
+        project_file.layers = json.dumps(layers)
+        db.session.commit()
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     with app.app_context():

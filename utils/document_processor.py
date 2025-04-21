@@ -3,6 +3,8 @@ import cv2
 import numpy as np
 from PIL import Image
 import os
+import base64
+from io import BytesIO
 
 class DocumentProcessor:
     @staticmethod
@@ -28,6 +30,7 @@ class DocumentProcessor:
                 'name': layer.name,
                 'type': 'image' if layer.kind == 'pixel' else 'text',
                 'visible': layer.visible,
+                'locked': False,  # Initialize locked state
                 'bounds': {
                     'x': layer.offset[0],
                     'y': layer.offset[1],
@@ -37,12 +40,23 @@ class DocumentProcessor:
             }
             
             if layer.kind == 'pixel':
-                layer_data['content'] = layer.topil().tobytes()
+                pil_img = layer.topil()
+                # Store the PIL image for processing
+                layer_data['pil_image'] = pil_img
+                # Store base64 encoded image for JSON serialization
+                buffered = BytesIO()
+                pil_img.save(buffered, format="PNG")
+                img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                layer_data['content'] = {
+                    'format': pil_img.mode,
+                    'size': pil_img.size,
+                    'data': img_str
+                }
             elif layer.kind == 'type':
-                layer_data['text'] = layer.text_data.text
-                layer_data['font'] = layer.text_data.font
-                layer_data['size'] = layer.text_data.font_size
-                layer_data['color'] = layer.text_data.color
+                layer_data['text'] = layer.text_data.text if layer.text_data else ''
+                layer_data['font'] = layer.text_data.font if layer.text_data else 'Arial'
+                layer_data['size'] = layer.text_data.font_size if layer.text_data else 12
+                layer_data['color'] = layer.text_data.color if layer.text_data else '#000000'
                 
             layers.append(layer_data)
             
@@ -68,8 +82,24 @@ class DocumentProcessor:
     @staticmethod
     def smart_crop_image(image, target_size):
         """Smartly crop an image while preserving important content."""
+        # Handle both PIL Image and base64 encoded image
+        if isinstance(image, str):
+            # Decode base64 string
+            img_data = base64.b64decode(image)
+            image = Image.open(BytesIO(img_data))
+        elif isinstance(image, dict) and 'data' in image:
+            # Handle content dictionary format
+            img_data = base64.b64decode(image['data'])
+            image = Image.open(BytesIO(img_data))
+        
+        # Convert to numpy array for OpenCV processing
+        img_array = np.array(image)
+        
         # Convert to grayscale for edge detection
-        gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
+        if len(img_array.shape) == 3:
+            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = img_array
         
         # Detect edges
         edges = cv2.Canny(gray, 100, 200)

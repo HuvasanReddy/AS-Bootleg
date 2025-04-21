@@ -4,6 +4,8 @@ import os
 import json
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
+import base64
+from io import BytesIO
 
 class LayerManager:
     _instance = None
@@ -19,6 +21,7 @@ class LayerManager:
         self.processor = DocumentProcessor()
         self.upload_folder = current_app.config['UPLOAD_FOLDER']
         self.export_folder = os.path.join(self.upload_folder, 'exports')
+        os.makedirs(self.export_folder, exist_ok=True)
     
     @classmethod
     def load_document(cls, filepath):
@@ -33,7 +36,7 @@ class LayerManager:
             
             layer = self._layers[layer_id]
             
-            if layer['locked']:
+            if layer.get('locked', False):  # Use get() with default False
                 return {'error': 'Layer is locked'}
             
             if layer_type == 'text':
@@ -41,7 +44,20 @@ class LayerManager:
                 # Auto-adjust text size and position
                 self._adjust_text_layer(layer)
             elif layer_type == 'image':
-                layer['content'] = content
+                if isinstance(content, dict) and 'data' in content:
+                    layer['content'] = content
+                else:
+                    # Convert content to our standard format if it's not already
+                    img_data = base64.b64decode(content) if isinstance(content, str) else content
+                    img = Image.open(BytesIO(img_data))
+                    buffered = BytesIO()
+                    img.save(buffered, format="PNG")
+                    img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                    layer['content'] = {
+                        'format': img.mode,
+                        'size': img.size,
+                        'data': img_str
+                    }
                 # Smart crop and resize image
                 self._adjust_image_layer(layer)
             
@@ -54,8 +70,8 @@ class LayerManager:
         """Adjust text layer properties for optimal display."""
         # Get the original bounds
         bounds = layer['bounds']
-        width = bounds[2] - bounds[0]
-        height = bounds[3] - bounds[1]
+        width = bounds['width']
+        height = bounds['height']
         
         # Create a temporary image to measure text
         temp_img = Image.new('RGB', (width, height), (255, 255, 255))
@@ -63,7 +79,12 @@ class LayerManager:
         
         # Start with the original font size
         font_size = layer.get('size', 12)
-        font = ImageFont.truetype(layer.get('font', 'Arial'), font_size)
+        try:
+            font = ImageFont.truetype(layer.get('font', 'Arial'), font_size)
+        except OSError:
+            # Fallback to default font if specified font is not available
+            font = ImageFont.load_default()
+            layer['font'] = 'default'
         
         # Measure text
         text = layer['text']
@@ -72,29 +93,50 @@ class LayerManager:
         # Adjust font size if needed
         while (text_width > width * 0.9 or text_height > height * 0.9) and font_size > 8:
             font_size -= 1
-            font = ImageFont.truetype(layer.get('font', 'Arial'), font_size)
+            try:
+                font = ImageFont.truetype(layer.get('font', 'Arial'), font_size)
+            except OSError:
+                font = ImageFont.load_default()
             text_width, text_height = draw.textsize(text, font=font)
         
         # Update layer properties
         layer['size'] = font_size
         layer['position'] = {
-            'x': bounds[0] + (width - text_width) // 2,
-            'y': bounds[1] + (height - text_height) // 2
+            'x': bounds['x'] + (width - text_width) // 2,
+            'y': bounds['y'] + (height - text_height) // 2
         }
     
     @classmethod
     def _adjust_image_layer(cls, layer):
         """Adjust image layer for optimal display."""
         bounds = layer['bounds']
-        width = bounds[2] - bounds[0]
-        height = bounds[3] - bounds[1]
+        width = bounds['width']
+        height = bounds['height']
         
-        # Load and process the image
-        image = Image.open(layer['content'])
+        # Handle the content based on its format
+        if isinstance(layer['content'], dict) and 'data' in layer['content']:
+            img_data = base64.b64decode(layer['content']['data'])
+            image = Image.open(BytesIO(img_data))
+        else:
+            # Fallback for legacy format
+            image = layer.get('pil_image')
+            if not image:
+                return
+        
+        # Process the image
         processed_image = DocumentProcessor.smart_crop_image(image, (width, height))
         
+        # Convert processed image back to base64 for storage
+        buffered = BytesIO()
+        processed_image.save(buffered, format="PNG")
+        img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        
         # Update layer with processed image
-        layer['processed_content'] = processed_image
+        layer['processed_content'] = {
+            'format': processed_image.mode,
+            'size': processed_image.size,
+            'data': img_str
+        }
     
     def export_document(self, size, format='png'):
         try:
@@ -112,7 +154,7 @@ class LayerManager:
                 return {'error': 'Invalid size specified'}
             
             target_size = sizes[size]
-            output_path = f'{self.export_folder}/output_{size}.{format}'
+            output_path = os.path.join(self.export_folder, f'output_{size}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.{format}')
             
             # Create a new image with the target size
             output = Image.new('RGB', target_size, (255, 255, 255))
@@ -124,7 +166,11 @@ class LayerManager:
                 
                 if layer['type'] == 'text':
                     # Create text layer
-                    font = ImageFont.truetype(layer.get('font', 'Arial'), layer['size'])
+                    try:
+                        font = ImageFont.truetype(layer.get('font', 'Arial'), layer['size'])
+                    except OSError:
+                        font = ImageFont.load_default()
+                    
                     draw = ImageDraw.Draw(output)
                     draw.text(
                         (layer['position']['x'], layer['position']['y']),
@@ -134,7 +180,10 @@ class LayerManager:
                     )
                 elif layer['type'] == 'image' and 'processed_content' in layer:
                     # Place processed image
-                    output.paste(layer['processed_content'], layer['bounds'])
+                    if isinstance(layer['processed_content'], dict) and 'data' in layer['processed_content']:
+                        img_data = base64.b64decode(layer['processed_content']['data'])
+                        img = Image.open(BytesIO(img_data))
+                        output.paste(img, (layer['bounds']['x'], layer['bounds']['y']))
             
             # Save the output
             output.save(output_path)
