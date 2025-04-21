@@ -34,12 +34,13 @@ load_dotenv()
 # Check for required environment variables
 secret_key = os.getenv('SECRET_KEY', 'dev-secret-key')  # Provide default for development
 database_url = os.getenv('DATABASE_URL', 'sqlite:///app.db')
-port = int(os.getenv('PORT', 8080))
+port = int(os.environ.get('PORT', 5000))  # Updated port configuration
 
 logger.info(f"Starting application with database: {database_url}")
 logger.info(f"Port configured as: {port}")
 
-app = Flask(__name__)
+# Initialize Flask app with static folder configuration
+app = Flask(__name__, static_folder='static')
 app.config['SECRET_KEY'] = secret_key
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -422,8 +423,4 @@ if __name__ == '__main__':
             logger.error(f"Database initialization failed: {str(e)}")
     
     logger.info(f"Starting Flask application on port {port}")
-    app.run(
-        host='0.0.0.0',
-        port=port,
-        debug=True
-    ) 
+    app.run(host='0.0.0.0', port=port) 
