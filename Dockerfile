@@ -26,7 +26,10 @@ RUN pip install --no-cache-dir -r requirements.txt --verbose
 # Copy the application code
 COPY . .
 
-# Expose port for the app (optional, depending on platform)
+# Create necessary directories
+RUN mkdir -p uploads/exports uploads/user_templates
+
+# Expose port for the app
 EXPOSE 8080
 
 # Command to run the application

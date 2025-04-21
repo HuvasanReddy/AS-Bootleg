@@ -19,21 +19,6 @@
                 }
             }
         }
-
-        // Add loading indicator
-        document.addEventListener('DOMContentLoaded', function() {
-            const loadingIndicator = document.getElementById('loading-indicator');
-            if (loadingIndicator) {
-                loadingIndicator.style.display = 'none';
-            }
-        });
-
-        window.addEventListener('load', function() {
-            const loadingIndicator = document.getElementById('loading-indicator');
-            if (loadingIndicator) {
-                loadingIndicator.style.display = 'none';
-            }
-        });
     </script>
     {% block extra_head %}{% endblock %}
 </head>
@@ -50,39 +35,14 @@
                     <div class="flex-shrink-0 flex items-center">
                         <a href="{{ url_for('index') }}" class="text-primary font-bold text-xl">Creative Automation</a>
                     </div>
-                    {% if current_user.is_authenticated %}
                     <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
                         <a href="{{ url_for('dashboard') }}" class="border-transparent text-gray-500 hover:border-primary hover:text-primary inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                             Dashboard
                         </a>
                         <a href="#" class="border-transparent text-gray-500 hover:border-primary hover:text-primary inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                            Templates
-                        </a>
-                        <a href="#" class="border-transparent text-gray-500 hover:border-primary hover:text-primary inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                             Projects
                         </a>
                     </div>
-                    {% endif %}
-                </div>
-                <div class="hidden sm:ml-6 sm:flex sm:items-center">
-                    {% if current_user.is_authenticated %}
-                    <div class="ml-3 relative">
-                        <div>
-                            <button type="button" class="bg-white rounded-full flex text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary" id="user-menu-button">
-                                <span class="sr-only">Open user menu</span>
-                                <img class="h-8 w-8 rounded-full" src="https://ui-avatars.com/api/?name={{ current_user.username }}" alt="">
-                            </button>
-                        </div>
-                        <div class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 hidden" id="user-menu">
-                            <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Your Profile</a>
-                            <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Settings</a>
-                            <a href="{{ url_for('logout') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Sign out</a>
-                        </div>
-                    </div>
-                    {% else %}
-                    <a href="{{ url_for('login') }}" class="text-gray-500 hover:text-primary px-3 py-2 rounded-md text-sm font-medium">Login</a>
-                    <a href="{{ url_for('register') }}" class="bg-primary text-white hover:bg-primary-dark px-4 py-2 rounded-md text-sm font-medium">Register</a>
-                    {% endif %}
                 </div>
             </div>
         </div>
@@ -111,22 +71,20 @@
     </footer>
 
     <script>
-        // User menu toggle
-        const userMenuButton = document.getElementById('user-menu-button');
-        const userMenu = document.getElementById('user-menu');
-        
-        if (userMenuButton && userMenu) {
-            userMenuButton.addEventListener('click', () => {
-                userMenu.classList.toggle('hidden');
-            });
-            
-            // Close menu when clicking outside
-            document.addEventListener('click', (e) => {
-                if (!userMenuButton.contains(e.target) && !userMenu.contains(e.target)) {
-                    userMenu.classList.add('hidden');
-                }
-            });
-        }
+        // Loading indicator
+        document.addEventListener('DOMContentLoaded', function() {
+            const loadingIndicator = document.getElementById('loading-indicator');
+            if (loadingIndicator) {
+                loadingIndicator.style.display = 'none';
+            }
+        });
+
+        window.addEventListener('load', function() {
+            const loadingIndicator = document.getElementById('loading-indicator');
+            if (loadingIndicator) {
+                loadingIndicator.style.display = 'none';
+            }
+        });
 
         // Error handler
         window.onerror = function(msg, url, lineNo, columnNo, error) {
