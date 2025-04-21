@@ -1,54 +1,41 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, send_file
-from flask_cors import CORS
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
 from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-import os
 from werkzeug.utils import secure_filename
-from utils.document_processor import process_document
-from utils.layer_manager import LayerManager
-from utils.ai_service import AIService
+import os
 from datetime import datetime
-import json
-from dotenv import load_dotenv
 import uuid
 from utils.document_processor import DocumentProcessor
+import json
+from dotenv import load_dotenv
+import base64
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
-
-# Configuration
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-ALLOWED_EXTENSIONS = {'psd', 'indd', 'png', 'jpg', 'jpeg'}
 
-# Initialize extensions
+# Ensure upload directories exist
+os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'exports'), exist_ok=True)
+
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-ai_service = AIService()
 
-# Ensure upload directory exists
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'exports'), exist_ok=True)
-os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'templates'), exist_ok=True)
-
-# Models
+# User model
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     projects = db.relationship('Project', backref='user', lazy=True)
-    templates = db.relationship('Template', backref='user', lazy=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -56,24 +43,16 @@ class User(UserMixin, db.Model):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+# Project model
 class Project(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     files = db.relationship('ProjectFile', backref='project', lazy=True)
 
-class Template(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    file_path = db.Column(db.String(200))
-    layers = db.Column(db.JSON)
-    is_public = db.Column(db.Boolean, default=False)
-
+# ProjectFile model
 class ProjectFile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     filename = db.Column(db.String(255), nullable=False)
@@ -87,28 +66,9 @@ class ProjectFile(db.Model):
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-# Routes
 @app.route('/')
 def index():
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
     return render_template('index.html')
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        user = User.query.filter_by(username=username).first()
-        
-        if user and user.check_password(password):
-            login_user(user)
-            return redirect(url_for('dashboard'))
-        flash('Invalid username or password')
-    return render_template('login.html')
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -122,7 +82,7 @@ def register():
             return redirect(url_for('register'))
         
         if User.query.filter_by(email=email).first():
-            flash('Email already exists')
+            flash('Email already registered')
             return redirect(url_for('register'))
         
         user = User(username=username, email=email)
@@ -130,9 +90,24 @@ def register():
         db.session.add(user)
         db.session.commit()
         
-        login_user(user)
-        return redirect(url_for('dashboard'))
+        flash('Registration successful! Please login.')
+        return redirect(url_for('login'))
+    
     return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username).first()
+        
+        if user and user.check_password(password):
+            login_user(user)
+            return redirect(url_for('dashboard'))
+        
+        flash('Invalid username or password')
+    return render_template('login.html')
 
 @app.route('/logout')
 @login_required
@@ -192,6 +167,13 @@ def upload_file(project_id):
         processor = DocumentProcessor()
         layers = processor.process_file(file_path)
         
+        # Convert image data to base64 if present
+        for layer in layers:
+            if 'image_data' in layer:
+                layer['image_data'] = base64.b64encode(layer['image_data']).decode('utf-8')
+            if 'locked' not in layer:
+                layer['locked'] = False
+        
         # Save file information to database
         project_file = ProjectFile(
             filename=unique_filename,
@@ -248,57 +230,6 @@ def export_file(project_id, file_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Template management endpoints
-@app.route('/api/templates', methods=['GET'])
-@login_required
-def get_templates():
-    templates = Template.query.filter(
-        (Template.user_id == current_user.id) | (Template.is_public == True)
-    ).all()
-    return jsonify([{
-        'id': t.id,
-        'name': t.name,
-        'is_public': t.is_public,
-        'created_at': t.created_at.isoformat()
-    } for t in templates])
-
-@app.route('/api/templates', methods=['POST'])
-@login_required
-def create_template():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-    
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'templates', f"{current_user.id}_{filename}")
-        file.save(filepath)
-        
-        # Process the document
-        layers = process_document(filepath)
-        
-        # Create template
-        template = Template(
-            name=filename,
-            user_id=current_user.id,
-            file_path=filepath,
-            layers=layers,
-            is_public=request.form.get('is_public', 'false').lower() == 'true'
-        )
-        db.session.add(template)
-        db.session.commit()
-        
-        return jsonify({
-            'message': 'Template created successfully',
-            'template_id': template.id
-        })
-    
-    return jsonify({'error': 'Invalid file type'}), 400
-
-# Batch processing endpoints
 @app.route('/api/batch-process', methods=['POST'])
 @login_required
 def batch_process():
@@ -312,25 +243,46 @@ def batch_process():
         if file.filename == '':
             continue
         
-        if file and allowed_file(file.filename):
+        if file:
             filename = secure_filename(file.filename)
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{current_user.id}_{filename}")
-            file.save(filepath)
+            unique_filename = f"{uuid.uuid4()}_{filename}"
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+            file.save(file_path)
             
-            # Process the document
-            layers = process_document(filepath)
+            # Process the file and extract layers
+            processor = DocumentProcessor()
+            layers = processor.process_file(file_path)
             
-            # Create project
+            # Convert image data to base64 if present
+            for layer in layers:
+                if 'image_data' in layer:
+                    layer['image_data'] = base64.b64encode(layer['image_data']).decode('utf-8')
+                if 'locked' not in layer:
+                    layer['locked'] = False
+            
+            # Create project with description
             project = Project(
                 name=filename,
-                user_id=current_user.id,
-                file_path=filepath
+                description=f"Batch processed file: {filename}",
+                user_id=current_user.id
             )
             db.session.add(project)
+            
+            # Save file information
+            project_file = ProjectFile(
+                filename=unique_filename,
+                original_filename=filename,
+                file_type=file.content_type,
+                project_id=project.id,
+                layers=json.dumps(layers)
+            )
+            db.session.add(project_file)
+            
             results.append({
                 'filename': filename,
                 'success': True,
-                'project_id': project.id
+                'project_id': project.id,
+                'file_id': project_file.id
             })
         else:
             results.append({
