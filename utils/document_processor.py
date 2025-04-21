@@ -19,6 +19,17 @@ class DocumentProcessor:
         except Exception as e:
             return {'error': str(e)}
 
+    def process_file(self, filepath):
+        """Process a file and return its layers.
+        
+        Args:
+            filepath (str): Path to the file to process
+            
+        Returns:
+            list: List of layer dictionaries or error dictionary
+        """
+        return DocumentProcessor.process_document(filepath)
+
     @staticmethod
     def _process_psd(filepath):
         psd = PSDImage.open(filepath)
