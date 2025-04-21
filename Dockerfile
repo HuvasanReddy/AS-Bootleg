@@ -29,6 +29,11 @@ RUN mkdir -p uploads/exports uploads/user_templates
 ENV FLASK_APP=app.py
 ENV FLASK_ENV=production
 
+# Initialize and run migrations
+RUN flask db init && \
+    flask db migrate -m "Initial migration" && \
+    flask db upgrade
+
 # Expose the port
 EXPOSE 8080
 
