@@ -10,15 +10,21 @@ from utils.layer_manager import LayerManager
 from utils.ai_service import AIService
 from datetime import datetime
 import json
+from dotenv import load_dotenv
+import uuid
+from utils.document_processor import DocumentProcessor
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
 
 # Configuration
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///app.db').replace('postgres://', 'postgresql://')
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-here')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///app.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 ALLOWED_EXTENSIONS = {'psd', 'indd', 'png', 'jpg', 'jpeg'}
 
@@ -53,12 +59,11 @@ class User(UserMixin, db.Model):
 class Project(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    file_path = db.Column(db.String(200))
-    layers = db.Column(db.JSON)
-    template_id = db.Column(db.Integer, db.ForeignKey('template.id'), nullable=True)
+    files = db.relationship('ProjectFile', backref='project', lazy=True)
 
 class Template(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -68,6 +73,15 @@ class Template(db.Model):
     file_path = db.Column(db.String(200))
     layers = db.Column(db.JSON)
     is_public = db.Column(db.Boolean, default=False)
+
+class ProjectFile(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(255), nullable=False)
+    original_filename = db.Column(db.String(255), nullable=False)
+    file_type = db.Column(db.String(50), nullable=False)
+    upload_date = db.Column(db.DateTime, default=datetime.utcnow)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    layers = db.Column(db.Text)  # JSON string of layer data
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -132,9 +146,35 @@ def dashboard():
     projects = Project.query.filter_by(user_id=current_user.id).all()
     return render_template('dashboard.html', projects=projects)
 
-@app.route('/upload', methods=['POST'])
+@app.route('/project/new', methods=['POST'])
 @login_required
-def upload_file():
+def create_project():
+    name = request.form.get('name')
+    description = request.form.get('description')
+    
+    project = Project(name=name, description=description, user_id=current_user.id)
+    db.session.add(project)
+    db.session.commit()
+    
+    return redirect(url_for('project', project_id=project.id))
+
+@app.route('/project/<int:project_id>')
+@login_required
+def project(project_id):
+    project = Project.query.get_or_404(project_id)
+    if project.user_id != current_user.id:
+        flash('You do not have permission to view this project')
+        return redirect(url_for('dashboard'))
+    
+    return render_template('project.html', project=project)
+
+@app.route('/project/<int:project_id>/upload', methods=['POST'])
+@login_required
+def upload_file(project_id):
+    project = Project.query.get_or_404(project_id)
+    if project.user_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
     
@@ -142,184 +182,71 @@ def upload_file():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
     
-    if file and allowed_file(file.filename):
+    if file:
         filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{current_user.id}_{filename}")
-        file.save(filepath)
+        unique_filename = f"{uuid.uuid4()}_{filename}"
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+        file.save(file_path)
         
-        # Create project
-        project = Project(
-            name=filename,
-            user_id=current_user.id,
-            file_path=filepath
+        # Process the file and extract layers
+        processor = DocumentProcessor()
+        layers = processor.process_file(file_path)
+        
+        # Save file information to database
+        project_file = ProjectFile(
+            filename=unique_filename,
+            original_filename=filename,
+            file_type=file.content_type,
+            project_id=project_id,
+            layers=json.dumps(layers)
         )
-        db.session.add(project)
-        
-        # Process the document
-        layers = process_document(filepath)
-        project.layers = layers
+        db.session.add(project_file)
         db.session.commit()
         
         return jsonify({
-            'message': 'File uploaded successfully',
-            'layers': layers,
-            'project_id': project.id
+            'success': True,
+            'file_id': project_file.id,
+            'filename': filename,
+            'layers': layers
         })
     
-    return jsonify({'error': 'Invalid file type'}), 400
+    return jsonify({'error': 'File upload failed'}), 500
 
-@app.route('/update-layer', methods=['POST'])
+@app.route('/project/<int:project_id>/file/<int:file_id>/layers', methods=['GET'])
 @login_required
-def update_layer():
-    data = request.json
-    layer_id = data.get('layer_id')
-    content = data.get('content')
-    layer_type = data.get('type')
-    project_id = data.get('project_id')
+def get_file_layers(project_id, file_id):
+    project_file = ProjectFile.query.get_or_404(file_id)
+    if project_file.project_id != project_id or project_file.project.user_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
     
-    if not all([layer_id, content, layer_type, project_id]):
-        return jsonify({'error': 'Missing required parameters'}), 400
-    
-    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
-    if not project:
-        return jsonify({'error': 'Project not found'}), 404
-    
-    # Update the layer
-    result = LayerManager.update_layer(layer_id, content, layer_type)
-    return jsonify(result)
+    return jsonify(json.loads(project_file.layers))
 
-@app.route('/export', methods=['POST'])
+@app.route('/project/<int:project_id>/file/<int:file_id>/export', methods=['POST'])
 @login_required
-def export_document():
-    data = request.json
-    size = data.get('size')
-    format = data.get('format', 'png')
-    project_id = data.get('project_id')
+def export_file(project_id, file_id):
+    project_file = ProjectFile.query.get_or_404(file_id)
+    if project_file.project_id != project_id or project_file.project.user_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
     
-    if not all([size, project_id]):
-        return jsonify({'error': 'Missing required parameters'}), 400
+    layer_data = request.json.get('layers', [])
+    if not layer_data:
+        return jsonify({'error': 'No layer data provided'}), 400
     
-    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first()
-    if not project:
-        return jsonify({'error': 'Project not found'}), 404
-    
-    # Export the document
-    result = LayerManager.export_document(size, format)
-    return jsonify(result)
-
-@app.route('/project/<int:project_id>')
-@login_required
-def view_project(project_id):
-    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first_or_404()
-    return render_template('project.html', project=project)
-
-@app.route('/project/<int:project_id>', methods=['PUT'])
-@login_required
-def update_project(project_id):
-    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first_or_404()
-    
-    # Update project data
-    data = request.json
-    if 'name' in data:
-        project.name = data['name']
-    if 'layers' in data:
-        project.layers = data['layers']
-    
-    db.session.commit()
-    return jsonify({'success': True})
-
-@app.route('/project/<int:project_id>', methods=['DELETE'])
-@login_required
-def delete_project(project_id):
-    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first_or_404()
-    
-    # Delete associated files
-    if project.file_path and os.path.exists(project.file_path):
-        os.remove(project.file_path)
-    
-    db.session.delete(project)
-    db.session.commit()
-    return jsonify({'success': True})
-
-@app.route('/project/<int:project_id>/export', methods=['POST'])
-@login_required
-def export_project(project_id):
-    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first_or_404()
-    
-    data = request.json
-    size = data.get('size', 'square')
-    format = data.get('format', 'png')
-    
-    # Export the document
-    result = LayerManager.export_document(size, format)
-    
-    # Create a unique filename for the export
-    export_filename = f"{project.name}_{size}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{format}"
+    # Process the file with the new layer data
+    processor = DocumentProcessor()
+    original_file = os.path.join(app.config['UPLOAD_FOLDER'], project_file.filename)
+    export_filename = f"export_{project_file.filename}"
     export_path = os.path.join(app.config['UPLOAD_FOLDER'], 'exports', export_filename)
     
-    # Ensure exports directory exists
-    os.makedirs(os.path.dirname(export_path), exist_ok=True)
-    
-    # Save the exported file
-    result['image'].save(export_path)
-    
-    return jsonify({
-        'success': True,
-        'path': f"/static/exports/{export_filename}",
-        'format': format
-    })
-
-# New AI-powered endpoints
-@app.route('/api/generate-text', methods=['POST'])
-@login_required
-def generate_text():
-    data = request.json
-    prompt = data.get('prompt')
-    max_length = data.get('max_length', 100)
-    
-    if not prompt:
-        return jsonify({'error': 'Prompt is required'}), 400
-    
-    result = ai_service.generate_text(prompt, max_length)
-    return jsonify({'text': result})
-
-@app.route('/api/generate-image', methods=['POST'])
-@login_required
-def generate_image():
-    data = request.json
-    prompt = data.get('prompt')
-    size = data.get('size', (512, 512))
-    
-    if not prompt:
-        return jsonify({'error': 'Prompt is required'}), 400
-    
-    result = ai_service.generate_image(prompt, size)
-    return jsonify(result)
-
-@app.route('/api/analyze-content', methods=['POST'])
-@login_required
-def analyze_content():
-    data = request.json
-    content = data.get('content')
-    
-    if not content:
-        return jsonify({'error': 'Content is required'}), 400
-    
-    result = ai_service.analyze_content(content)
-    return jsonify({'analysis': result})
-
-@app.route('/api/generate-variations', methods=['POST'])
-@login_required
-def generate_variations():
-    data = request.json
-    content = data.get('content')
-    num_variations = data.get('num_variations', 3)
-    
-    if not content:
-        return jsonify({'error': 'Content is required'}), 400
-    
-    result = ai_service.generate_variations(content, num_variations)
-    return jsonify({'variations': result})
+    try:
+        processor.export_file(original_file, export_path, layer_data)
+        return send_file(
+            export_path,
+            as_attachment=True,
+            download_name=project_file.original_filename
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # Template management endpoints
 @app.route('/api/templates', methods=['GET'])
@@ -397,8 +324,7 @@ def batch_process():
             project = Project(
                 name=filename,
                 user_id=current_user.id,
-                file_path=filepath,
-                layers=layers
+                file_path=filepath
             )
             db.session.add(project)
             results.append({
