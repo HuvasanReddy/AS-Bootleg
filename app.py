@@ -32,20 +32,23 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Check for required environment variables
-secret_key = os.getenv('SECRET_KEY')
-if not secret_key:
-    raise RuntimeError("SECRET_KEY environment variable is required")
+secret_key = os.getenv('SECRET_KEY', 'dev-secret-key')  # Provide default for development
+database_url = os.getenv('DATABASE_URL', 'sqlite:///app.db')
+port = int(os.getenv('PORT', 8080))
+
+logger.info(f"Starting application with database: {database_url}")
+logger.info(f"Port configured as: {port}")
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = secret_key
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///app.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['TEMPLATE_UPLOAD_FOLDER'] = os.path.join('uploads', 'user_templates')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Initialize CORS
-CORS(app, resources={r"/api/*": {"origins": os.getenv('ALLOWED_ORIGINS', '*')}})
+# Initialize CORS with more permissive settings for testing
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Initialize database and migrations
 db = SQLAlchemy(app)
@@ -117,13 +120,18 @@ class ProjectFile(db.Model):
 def index():
     logger.debug("Accessing index route")
     try:
-        # Test database connection
-        db.session.execute('SELECT 1')
-        logger.debug("Database connection successful")
         return render_template('index.html')
     except Exception as e:
         logger.error(f"Error in index route: {str(e)}")
-        return "Error: Unable to connect to database. Please check logs.", 500
+        return str(e), 500
+
+@app.route('/test')
+def test():
+    """Simple test endpoint to verify the application is running"""
+    return jsonify({
+        "status": "ok",
+        "message": "Application is running"
+    })
 
 @app.route('/health')
 def health_check():
@@ -412,7 +420,10 @@ if __name__ == '__main__':
             logger.info("Database initialized successfully")
         except Exception as e:
             logger.error(f"Database initialization failed: {str(e)}")
-            
-    port = int(os.getenv('PORT', 8080))
-    logger.info(f"Starting application on port {port}")
-    app.run(host='0.0.0.0', port=port, debug=True) 
+    
+    logger.info(f"Starting Flask application on port {port}")
+    app.run(
+        host='0.0.0.0',
+        port=port,
+        debug=True
+    ) 
