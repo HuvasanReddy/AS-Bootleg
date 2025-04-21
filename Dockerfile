@@ -10,6 +10,7 @@ COPY requirements.txt .
 # Install system-level dependencies needed for Python packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    libpq-dev \
     libmagic1 libmagic-dev \
     libjpeg-dev zlib1g-dev libpng-dev libtiff-dev \
     libgl1-mesa-glx libglib2.0-0 \
