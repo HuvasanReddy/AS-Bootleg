@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Check for required environment variables
-secret_key = os.getenv('SECRET_KEY', 'dev-secret-key')  # Provide default for development
+secret_key = os.getenv('SECRET_KEY', 'dev-secret-key')
 database_url = os.getenv('DATABASE_URL', 'sqlite:///app.db')
-port = int(os.environ.get('PORT', 5000))  # Updated port configuration
+port = int(os.environ.get('PORT', 5000))
 
 logger.info(f"Starting application with database: {database_url}")
 logger.info(f"Port configured as: {port}")
@@ -48,18 +48,33 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['TEMPLATE_UPLOAD_FOLDER'] = os.path.join('uploads', 'user_templates')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Initialize CORS with more permissive settings for testing
-CORS(app, resources={r"/*": {"origins": "*"}})
+# Initialize extensions
+try:
+    logger.info("Initializing CORS...")
+    CORS(app, resources={r"/*": {"origins": "*"}})
+    
+    logger.info("Initializing database...")
+    db = SQLAlchemy(app)
+    
+    logger.info("Initializing migrations...")
+    migrate = Migrate(app, db)
+    
+    logger.info("Initializing Marshmallow...")
+    ma = Marshmallow(app)
+except Exception as e:
+    logger.error(f"Error initializing extensions: {str(e)}")
+    raise
 
-# Initialize database and migrations
-db = SQLAlchemy(app)
-migrate = Migrate(app, db)
-ma = Marshmallow(app)
-
-# Create upload directories if they don't exist
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(app.config['TEMPLATE_UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'exports'), exist_ok=True)
+# Create upload directories
+try:
+    logger.info("Creating upload directories...")
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    os.makedirs(app.config['TEMPLATE_UPLOAD_FOLDER'], exist_ok=True)
+    os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'exports'), exist_ok=True)
+    logger.info("Upload directories created successfully")
+except Exception as e:
+    logger.error(f"Error creating directories: {str(e)}")
+    raise
 
 # Define allowed file extensions
 ALLOWED_EXTENSIONS = {'psd', 'ai', 'indd', 'jpg', 'jpeg', 'png', 'gif'}
@@ -117,14 +132,45 @@ class ProjectFile(db.Model):
     filepath = db.Column(db.String(200))
     layers = db.Column(db.Text)  # JSON string of layer data
 
+@app.before_first_request
+def initialize_database():
+    try:
+        logger.info("Setting up database...")
+        db.create_all()
+        logger.info("Database setup completed")
+    except Exception as e:
+        logger.error(f"Database initialization failed: {str(e)}")
+        raise
+
+@app.route('/debug')
+def debug_info():
+    """Endpoint to check application configuration and status"""
+    try:
+        db_status = "Connected" if db.session.execute('SELECT 1').scalar() else "Disconnected"
+    except Exception as e:
+        db_status = f"Error: {str(e)}"
+
+    info = {
+        "database_url": database_url,
+        "database_status": db_status,
+        "upload_folder": app.config['UPLOAD_FOLDER'],
+        "template_folder": app.config['TEMPLATE_UPLOAD_FOLDER'],
+        "static_folder": app.static_folder,
+        "port": port,
+        "debug_mode": app.debug,
+        "env": app.env
+    }
+    return jsonify(info)
+
 @app.route('/')
 def index():
     logger.debug("Accessing index route")
     try:
+        logger.debug("Rendering index template")
         return render_template('index.html')
     except Exception as e:
         logger.error(f"Error in index route: {str(e)}")
-        return str(e), 500
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/test')
 def test():
@@ -136,7 +182,7 @@ def test():
 
 @app.route('/health')
 def health_check():
-    logger.debug("Health check requested")
+    """Health check endpoint"""
     try:
         # Test database connection
         db.session.execute('SELECT 1')
@@ -145,13 +191,15 @@ def health_check():
         return jsonify({
             "status": "healthy",
             "database": "connected",
-            "upload_folder": "accessible"
+            "upload_folder": "accessible",
+            "timestamp": datetime.utcnow().isoformat()
         })
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")
         return jsonify({
             "status": "unhealthy",
-            "error": str(e)
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
         }), 500
 
 @app.route('/dashboard')
@@ -393,26 +441,6 @@ def update_layer():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.before_first_request
-def initialize_database():
-    try:
-        logger.info("Initializing database...")
-        db.create_all()
-        # Check if admin user exists, if not create one
-        admin = User.query.filter_by(username='admin').first()
-        if not admin:
-            admin = User(
-                username='admin',
-                email='admin@example.com'
-            )
-            admin.set_password('admin123')
-            db.session.add(admin)
-            db.session.commit()
-            logger.info("Admin user created successfully")
-    except Exception as e:
-        logger.error(f"Database initialization failed: {str(e)}")
-        db.session.rollback()
-
 if __name__ == '__main__':
     with app.app_context():
         try:
@@ -421,6 +449,7 @@ if __name__ == '__main__':
             logger.info("Database initialized successfully")
         except Exception as e:
             logger.error(f"Database initialization failed: {str(e)}")
+            raise
     
     logger.info(f"Starting Flask application on port {port}")
     app.run(host='0.0.0.0', port=port) 
