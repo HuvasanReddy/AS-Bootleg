@@ -9,6 +9,9 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
     python3-dev \
+    libmagic1 \
+    libopencv-dev \
+    libgl1-mesa-glx \
     && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip and install Python dependencies
