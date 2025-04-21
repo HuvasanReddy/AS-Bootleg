@@ -443,8 +443,13 @@ def update_layer():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-if __name__ == '__main__':
+def create_app():
     with app.app_context():
+        # Import routes and models here to avoid circular imports
+        from routes import register_routes
+        register_routes(app)
+        
+        # Initialize database
         try:
             logger.info("Initializing database...")
             db.create_all()
@@ -452,6 +457,12 @@ if __name__ == '__main__':
         except Exception as e:
             logger.error(f"Database initialization failed: {str(e)}")
             raise
-    
+
+    return app
+
+# Create the application instance
+app = create_app()
+
+if __name__ == '__main__':
     logger.info(f"Starting Flask application on port {port}")
     app.run(host='0.0.0.0', port=port) 
