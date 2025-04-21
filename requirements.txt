@@ -8,4 +8,5 @@ Pillow>=10.3.0,<11.0
 python-magic==0.4.24
 gunicorn==20.1.0
 psycopg2-binary==2.9.1
-psd-tools>=1.10.7 
+psd-tools>=1.10.7
+opencv-python>=4.8.0 
