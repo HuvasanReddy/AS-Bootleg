@@ -29,6 +29,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def verify_db_connection(app):
+    """Verify database connection and log detailed information"""
+    from sqlalchemy import text
+    with app.app_context():
+        try:
+            # Get database URL (mask password for logging)
+            db_url = app.config['SQLALCHEMY_DATABASE_URI']
+            masked_url = db_url.replace(db_url.split(':')[2].split('@')[0], '****')
+            logger.info(f"Attempting to connect to database: {masked_url}")
+
+            # Test connection
+            db.session.execute(text('SELECT 1'))
+            db.session.commit()
+            logger.info("Database connection successful!")
+
+            # Get database info
+            result = db.session.execute(text('SELECT version();')).scalar()
+            logger.info(f"Database version: {result}")
+
+            return True
+        except Exception as e:
+            logger.error(f"Database connection failed: {str(e)}")
+            return False
+
 def create_app():
     # Load environment variables
     load_dotenv()
@@ -49,10 +73,12 @@ def create_app():
         db_port = os.getenv('PGPORT', '5432')
         db_name = os.getenv('POSTGRES_DB', 'railway')
         database_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+        logger.info(f"Constructed database URL from components (user: {db_user}, host: {db_host}, port: {db_port}, db: {db_name})")
 
     # Convert postgres:// to postgresql:// if necessary
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
+        logger.info("Converted postgres:// to postgresql:// in database URL")
         
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -68,8 +94,14 @@ def create_app():
         logger.info("Initializing extensions...")
         init_extensions(app)
         logger.info("Extensions initialized successfully")
+
+        # Verify database connection
+        if not verify_db_connection(app):
+            logger.error("Failed to verify database connection")
+            raise Exception("Database connection verification failed")
+        
     except Exception as e:
-        logger.error(f"Error initializing extensions: {str(e)}")
+        logger.error(f"Error during initialization: {str(e)}")
         raise
 
     # Create upload directories
@@ -90,9 +122,9 @@ def create_app():
         
         # Initialize database
         try:
-            logger.info("Initializing database...")
+            logger.info("Initializing database tables...")
             db.create_all()
-            logger.info("Database initialized successfully")
+            logger.info("Database tables initialized successfully")
         except Exception as e:
             logger.error(f"Database initialization failed: {str(e)}")
             raise
