@@ -38,9 +38,22 @@ def create_app():
     
     # Configure the app
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
-    database_url = os.getenv('DATABASE_URL', 'postgresql://postgres:DuiDSlJeUZaMptWBSALYMzDlSHembYvi@postgres-6sob.railway.internal:5432/railway')
+    
+    # Use DATABASE_URL from environment, or construct it from individual components
+    database_url = os.getenv('DATABASE_URL')
+    if not database_url:
+        # Construct URL from individual components
+        db_user = os.getenv('POSTGRES_USER', 'postgres')
+        db_password = os.getenv('POSTGRES_PASSWORD', 'DuiDSlJeUZaMptWBSALYMzDlSHembYvi')
+        db_host = os.getenv('PGHOST', 'postgres-6sob.railway.internal')
+        db_port = os.getenv('PGPORT', '5432')
+        db_name = os.getenv('POSTGRES_DB', 'railway')
+        database_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+
+    # Convert postgres:// to postgresql:// if necessary
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
+        
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['UPLOAD_FOLDER'] = 'uploads'
