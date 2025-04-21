@@ -8,6 +8,11 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     build-essential \
     libmagic1 \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first to leverage Docker cache
@@ -27,7 +32,7 @@ ENV FLASK_APP=app.py
 ENV FLASK_ENV=production
 
 # Expose the port
-EXPOSE 8000
+EXPOSE 8080
 
 # Run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:app"] 
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "app:app"] 
