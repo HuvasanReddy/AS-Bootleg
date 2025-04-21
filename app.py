@@ -378,6 +378,11 @@ def update_layer():
     try:
         # Verify permissions
         project_file = ProjectFile.query.get_or_404(data['file_id'])
+        
+        # Verify project_id matches
+        if data['project_id'] != project_file.project_id:
+            return jsonify({'error': 'Bad project_id'}), 400
+            
         if project_file.project.user_id != current_user.id:
             return jsonify({'error': 'Unauthorized'}), 403
         
