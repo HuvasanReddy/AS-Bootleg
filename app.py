@@ -312,10 +312,10 @@ def batch_process():
                     processor = DocumentProcessor()
                     layers = processor.process_file(tmp.name)
                     
-                    # Convert image data to base64 if present
+                    # Convert image content to base64 if needed
                     for layer in layers:
-                        if 'image_data' in layer:
-                            layer['image_data'] = base64.b64encode(layer['image_data']).decode('utf-8')
+                        if 'content' in layer and isinstance(layer['content'], (bytes, bytearray)):
+                            layer['content'] = base64.b64encode(layer['content']).decode('utf-8')
                         if 'locked' not in layer:
                             layer['locked'] = False
                     
