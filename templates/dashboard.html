@@ -2,138 +2,251 @@
 
 {% block title %}Dashboard - Creative Automation Tool{% endblock %}
 
-{% block content %}
-<div class="space-y-8">
-    <!-- Welcome Section -->
-    <div class="bg-white rounded-lg shadow-md p-6">
-        <h1 class="text-2xl font-bold text-gray-800">Welcome, {{ current_user.username }}!</h1>
-        <p class="text-gray-600 mt-2">Manage your creative projects and templates here.</p>
-    </div>
+{% block extra_head %}
+<style>
+    .drop-zone {
+        border: 2px dashed #E5E7EB;
+        border-radius: 0.5rem;
+        padding: 2rem;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+    .drop-zone:hover {
+        border-color: #4F46E5;
+        background-color: #F5F3FF;
+    }
+    .drop-zone.dragover {
+        border-color: #4F46E5;
+        background-color: #F5F3FF;
+    }
+</style>
+{% endblock %}
 
-    <!-- Projects Section -->
-    <div class="bg-white rounded-lg shadow-md p-6">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-xl font-semibold text-gray-800">Your Projects</h2>
-            <button onclick="showUploadModal()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-                Upload New Project
+{% block content %}
+<div class="space-y-6">
+    <!-- Quick Actions -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <h2 class="text-lg font-medium text-gray-900 mb-4">Quick Actions</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <button onclick="showNewProjectModal()" class="flex items-center justify-center p-4 border border-gray-200 rounded-lg hover:border-primary hover:bg-primary/5">
+                <i class="fas fa-plus-circle text-primary text-xl mr-2"></i>
+                <span>New Project</span>
+            </button>
+            <button onclick="showNewTemplateModal()" class="flex items-center justify-center p-4 border border-gray-200 rounded-lg hover:border-primary hover:bg-primary/5">
+                <i class="fas fa-file-alt text-primary text-xl mr-2"></i>
+                <span>New Template</span>
+            </button>
+            <button onclick="showBatchProcessModal()" class="flex items-center justify-center p-4 border border-gray-200 rounded-lg hover:border-primary hover:bg-primary/5">
+                <i class="fas fa-tasks text-primary text-xl mr-2"></i>
+                <span>Batch Process</span>
             </button>
         </div>
+    </div>
 
-        {% if projects %}
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {% for project in projects %}
-                    <div class="border rounded-lg p-4 hover:shadow-lg transition-shadow">
-                        <h3 class="font-semibold text-lg">{{ project.name }}</h3>
-                        <p class="text-sm text-gray-600">Created: {{ project.created_at.strftime('%Y-%m-%d') }}</p>
-                        <p class="text-sm text-gray-600">Last Updated: {{ project.updated_at.strftime('%Y-%m-%d') }}</p>
-                        <div class="mt-4 flex space-x-2">
-                            <button onclick="editProject({{ project.id }})" class="text-blue-500 hover:text-blue-700">
-                                Edit
-                            </button>
-                            <button onclick="exportProject({{ project.id }})" class="text-green-500 hover:text-green-700">
-                                Export
-                            </button>
-                            <button onclick="deleteProject({{ project.id }})" class="text-red-500 hover:text-red-700">
-                                Delete
-                            </button>
-                        </div>
-                    </div>
-                {% endfor %}
+    <!-- Recent Projects -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-medium text-gray-900">Recent Projects</h2>
+            <a href="#" class="text-primary hover:text-primary-dark">View All</a>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for project in projects %}
+            <div class="border border-gray-200 rounded-lg p-4 hover:border-primary hover:shadow-md transition-shadow">
+                <div class="flex justify-between items-start">
+                    <h3 class="font-medium text-gray-900">{{ project.name }}</h3>
+                    <span class="text-xs text-gray-500">{{ project.updated_at.strftime('%b %d, %Y') }}</span>
+                </div>
+                <div class="mt-2 flex space-x-2">
+                    <a href="{{ url_for('view_project', project_id=project.id) }}" class="text-primary hover:text-primary-dark text-sm">
+                        <i class="fas fa-edit"></i> Edit
+                    </a>
+                    <button onclick="exportProject({{ project.id }})" class="text-secondary hover:text-secondary-dark text-sm">
+                        <i class="fas fa-download"></i> Export
+                    </button>
+                </div>
             </div>
-        {% else %}
-            <div class="text-center py-8">
-                <p class="text-gray-600">You don't have any projects yet. Upload your first project to get started!</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- AI Tools -->
+    <div class="bg-white shadow rounded-lg p-6">
+        <h2 class="text-lg font-medium text-gray-900 mb-4">AI Tools</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="border border-gray-200 rounded-lg p-4">
+                <h3 class="font-medium text-gray-900 mb-2">Text Generation</h3>
+                <div class="space-y-2">
+                    <input type="text" id="textPrompt" placeholder="Enter your prompt" class="w-full border border-gray-200 rounded px-3 py-2">
+                    <button onclick="generateText()" class="w-full bg-primary text-white py-2 rounded hover:bg-primary-dark">
+                        Generate Text
+                    </button>
+                </div>
+                <div id="generatedText" class="mt-4 hidden">
+                    <h4 class="font-medium text-gray-900 mb-2">Generated Text:</h4>
+                    <p class="text-gray-700"></p>
+                </div>
             </div>
-        {% endif %}
+            <div class="border border-gray-200 rounded-lg p-4">
+                <h3 class="font-medium text-gray-900 mb-2">Image Generation</h3>
+                <div class="space-y-2">
+                    <input type="text" id="imagePrompt" placeholder="Describe the image you want" class="w-full border border-gray-200 rounded px-3 py-2">
+                    <button onclick="generateImage()" class="w-full bg-primary text-white py-2 rounded hover:bg-primary-dark">
+                        Generate Image
+                    </button>
+                </div>
+                <div id="generatedImage" class="mt-4 hidden">
+                    <h4 class="font-medium text-gray-900 mb-2">Generated Image:</h4>
+                    <img src="" alt="Generated image" class="w-full rounded">
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
-<!-- Upload Modal -->
-<div id="uploadModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden">
+<!-- New Project Modal -->
+<div id="newProjectModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden">
     <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-        <div class="mt-3 text-center">
-            <h3 class="text-lg leading-6 font-medium text-gray-900">Upload New Project</h3>
-            <div class="mt-2 px-7 py-3">
-                <form id="uploadForm" class="space-y-4">
-                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                        <input type="file" id="fileInput" class="hidden" accept=".psd,.indd">
-                        <label for="fileInput" class="cursor-pointer">
-                            <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                            </svg>
-                            <p class="mt-1 text-sm text-gray-600">Click to upload PSD or InDesign file</p>
-                        </label>
-                    </div>
-                </form>
-            </div>
-            <div class="items-center px-4 py-3">
-                <button onclick="hideUploadModal()" class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">
-                    Cancel
-                </button>
-            </div>
+        <div class="mt-3">
+            <h3 class="text-lg font-medium text-gray-900">Create New Project</h3>
+            <form id="newProjectForm" class="mt-4 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Project Name</label>
+                    <input type="text" name="name" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-primary focus:border-primary">
+                </div>
+                <div class="drop-zone" id="projectDropZone">
+                    <input type="file" id="projectFile" class="hidden" accept=".psd,.indd,.png,.jpg,.jpeg">
+                    <p class="text-gray-500">Drag and drop your file here or click to browse</p>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="hideNewProjectModal()" class="px-4 py-2 text-gray-700 bg-gray-100 rounded hover:bg-gray-200">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-4 py-2 text-white bg-primary rounded hover:bg-primary-dark">
+                        Create
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Batch Process Modal -->
+<div id="batchProcessModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <h3 class="text-lg font-medium text-gray-900">Batch Process Files</h3>
+            <form id="batchProcessForm" class="mt-4 space-y-4">
+                <div class="drop-zone" id="batchDropZone">
+                    <input type="file" id="batchFiles" class="hidden" multiple accept=".psd,.indd,.png,.jpg,.jpeg">
+                    <p class="text-gray-500">Drag and drop multiple files here or click to browse</p>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="hideBatchProcessModal()" class="px-4 py-2 text-gray-700 bg-gray-100 rounded hover:bg-gray-200">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-4 py-2 text-white bg-primary rounded hover:bg-primary-dark">
+                        Process
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
 {% endblock %}
 
-{% block scripts %}
+{% block extra_js %}
 <script>
-function showUploadModal() {
-    document.getElementById('uploadModal').classList.remove('hidden');
-}
-
-function hideUploadModal() {
-    document.getElementById('uploadModal').classList.add('hidden');
-}
-
-function editProject(projectId) {
-    window.location.href = `/project/${projectId}`;
-}
-
-function exportProject(projectId) {
-    // Implement export functionality
-    console.log('Export project:', projectId);
-}
-
-function deleteProject(projectId) {
-    if (confirm('Are you sure you want to delete this project?')) {
-        fetch(`/project/${projectId}`, {
-            method: 'DELETE',
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                window.location.reload();
-            } else {
-                alert('Error deleting project');
-            }
+    // Modal functions
+    function showNewProjectModal() {
+        document.getElementById('newProjectModal').classList.remove('hidden');
+    }
+    
+    function hideNewProjectModal() {
+        document.getElementById('newProjectModal').classList.add('hidden');
+    }
+    
+    function showBatchProcessModal() {
+        document.getElementById('batchProcessModal').classList.remove('hidden');
+    }
+    
+    function hideBatchProcessModal() {
+        document.getElementById('batchProcessModal').classList.add('hidden');
+    }
+    
+    // Drop zone functionality
+    function setupDropZone(dropZoneId, inputId) {
+        const dropZone = document.getElementById(dropZoneId);
+        const input = document.getElementById(inputId);
+        
+        dropZone.addEventListener('click', () => input.click());
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            input.files = e.dataTransfer.files;
         });
     }
-}
-
-document.getElementById('fileInput').addEventListener('change', function(e) {
-    const file = e.target.files[0];
-    if (file) {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        fetch('/upload', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.error) {
-                alert(data.error);
-            } else {
-                window.location.reload();
-            }
-        })
-        .catch(error => {
+    
+    // AI Generation functions
+    async function generateText() {
+        const prompt = document.getElementById('textPrompt').value;
+        if (!prompt) return;
+        
+        try {
+            const response = await fetch('/api/generate-text', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ prompt, max_length: 100 })
+            });
+            
+            const data = await response.json();
+            const generatedText = document.getElementById('generatedText');
+            generatedText.classList.remove('hidden');
+            generatedText.querySelector('p').textContent = data.text;
+        } catch (error) {
             console.error('Error:', error);
-            alert('Error uploading file');
-        });
+        }
     }
-});
+    
+    async function generateImage() {
+        const prompt = document.getElementById('imagePrompt').value;
+        if (!prompt) return;
+        
+        try {
+            const response = await fetch('/api/generate-image', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ prompt, size: [512, 512] })
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                const generatedImage = document.getElementById('generatedImage');
+                generatedImage.classList.remove('hidden');
+                generatedImage.querySelector('img').src = `data:image/png;base64,${data.image}`;
+            }
+        } catch (error) {
+            console.error('Error:', error);
+        }
+    }
+    
+    // Initialize drop zones
+    document.addEventListener('DOMContentLoaded', () => {
+        setupDropZone('projectDropZone', 'projectFile');
+        setupDropZone('batchDropZone', 'batchFiles');
+    });
 </script>
 {% endblock %} 

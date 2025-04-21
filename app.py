@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, send_file
 from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_sqlalchemy import SQLAlchemy
@@ -7,7 +7,9 @@ import os
 from werkzeug.utils import secure_filename
 from utils.document_processor import process_document
 from utils.layer_manager import LayerManager
+from utils.ai_service import AIService
 from datetime import datetime
+import json
 
 app = Flask(__name__)
 CORS(app)
@@ -18,17 +20,19 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:/
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-ALLOWED_EXTENSIONS = {'psd', 'indd'}
+ALLOWED_EXTENSIONS = {'psd', 'indd', 'png', 'jpg', 'jpeg'}
 
 # Initialize extensions
 db = SQLAlchemy(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+ai_service = AIService()
 
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'exports'), exist_ok=True)
+os.makedirs(os.path.join(app.config['UPLOAD_FOLDER'], 'templates'), exist_ok=True)
 
 # Models
 class User(UserMixin, db.Model):
@@ -38,6 +42,7 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(128))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     projects = db.relationship('Project', backref='user', lazy=True)
+    templates = db.relationship('Template', backref='user', lazy=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -53,6 +58,16 @@ class Project(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     file_path = db.Column(db.String(200))
     layers = db.Column(db.JSON)
+    template_id = db.Column(db.Integer, db.ForeignKey('template.id'), nullable=True)
+
+class Template(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    file_path = db.Column(db.String(200))
+    layers = db.Column(db.JSON)
+    is_public = db.Column(db.Boolean, default=False)
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -253,6 +268,153 @@ def export_project(project_id):
         'path': f"/static/exports/{export_filename}",
         'format': format
     })
+
+# New AI-powered endpoints
+@app.route('/api/generate-text', methods=['POST'])
+@login_required
+def generate_text():
+    data = request.json
+    prompt = data.get('prompt')
+    max_length = data.get('max_length', 100)
+    
+    if not prompt:
+        return jsonify({'error': 'Prompt is required'}), 400
+    
+    result = ai_service.generate_text(prompt, max_length)
+    return jsonify({'text': result})
+
+@app.route('/api/generate-image', methods=['POST'])
+@login_required
+def generate_image():
+    data = request.json
+    prompt = data.get('prompt')
+    size = data.get('size', (512, 512))
+    
+    if not prompt:
+        return jsonify({'error': 'Prompt is required'}), 400
+    
+    result = ai_service.generate_image(prompt, size)
+    return jsonify(result)
+
+@app.route('/api/analyze-content', methods=['POST'])
+@login_required
+def analyze_content():
+    data = request.json
+    content = data.get('content')
+    
+    if not content:
+        return jsonify({'error': 'Content is required'}), 400
+    
+    result = ai_service.analyze_content(content)
+    return jsonify({'analysis': result})
+
+@app.route('/api/generate-variations', methods=['POST'])
+@login_required
+def generate_variations():
+    data = request.json
+    content = data.get('content')
+    num_variations = data.get('num_variations', 3)
+    
+    if not content:
+        return jsonify({'error': 'Content is required'}), 400
+    
+    result = ai_service.generate_variations(content, num_variations)
+    return jsonify({'variations': result})
+
+# Template management endpoints
+@app.route('/api/templates', methods=['GET'])
+@login_required
+def get_templates():
+    templates = Template.query.filter(
+        (Template.user_id == current_user.id) | (Template.is_public == True)
+    ).all()
+    return jsonify([{
+        'id': t.id,
+        'name': t.name,
+        'is_public': t.is_public,
+        'created_at': t.created_at.isoformat()
+    } for t in templates])
+
+@app.route('/api/templates', methods=['POST'])
+@login_required
+def create_template():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'templates', f"{current_user.id}_{filename}")
+        file.save(filepath)
+        
+        # Process the document
+        layers = process_document(filepath)
+        
+        # Create template
+        template = Template(
+            name=filename,
+            user_id=current_user.id,
+            file_path=filepath,
+            layers=layers,
+            is_public=request.form.get('is_public', 'false').lower() == 'true'
+        )
+        db.session.add(template)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Template created successfully',
+            'template_id': template.id
+        })
+    
+    return jsonify({'error': 'Invalid file type'}), 400
+
+# Batch processing endpoints
+@app.route('/api/batch-process', methods=['POST'])
+@login_required
+def batch_process():
+    if 'files[]' not in request.files:
+        return jsonify({'error': 'No files part'}), 400
+    
+    files = request.files.getlist('files[]')
+    results = []
+    
+    for file in files:
+        if file.filename == '':
+            continue
+        
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{current_user.id}_{filename}")
+            file.save(filepath)
+            
+            # Process the document
+            layers = process_document(filepath)
+            
+            # Create project
+            project = Project(
+                name=filename,
+                user_id=current_user.id,
+                file_path=filepath,
+                layers=layers
+            )
+            db.session.add(project)
+            results.append({
+                'filename': filename,
+                'success': True,
+                'project_id': project.id
+            })
+        else:
+            results.append({
+                'filename': file.filename,
+                'success': False,
+                'error': 'Invalid file type'
+            })
+    
+    db.session.commit()
+    return jsonify({'results': results})
 
 if __name__ == '__main__':
     with app.app_context():

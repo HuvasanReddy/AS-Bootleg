@@ -1,57 +1,118 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Creative Automation Tool</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body class="bg-gray-100">
-    <div class="container mx-auto px-4 py-8">
-        <header class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-800">Creative Automation Tool</h1>
-            <p class="text-gray-600">Upload your template and customize layers</p>
-        </header>
+{% extends "base.html" %}
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <!-- Upload Section -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <h2 class="text-xl font-semibold mb-4">Upload Template</h2>
-                <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                    <input type="file" id="fileInput" class="hidden" accept=".psd,.indd">
-                    <label for="fileInput" class="cursor-pointer">
-                        <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-                        </svg>
-                        <p class="mt-1 text-sm text-gray-600">Click to upload PSD or InDesign file</p>
-                    </label>
-                </div>
+{% block title %}Creative Automation Tool{% endblock %}
+
+{% block content %}
+<div class="relative">
+    <!-- Hero Section -->
+    <div class="relative bg-primary">
+        <div class="absolute inset-0">
+            <img class="w-full h-full object-cover" src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?ixlib=rb-1.2.1&auto=format&fit=crop&w=1950&q=80" alt="Creative background">
+            <div class="absolute inset-0 bg-primary mix-blend-multiply"></div>
+        </div>
+        <div class="relative max-w-7xl mx-auto py-24 px-4 sm:py-32 sm:px-6 lg:px-8">
+            <h1 class="text-4xl font-extrabold tracking-tight text-white sm:text-5xl lg:text-6xl">
+                Creative Automation Tool
+            </h1>
+            <p class="mt-6 text-xl text-white max-w-3xl">
+                Create, edit, and automate your creative projects with AI-powered tools. Perfect for designers, marketers, and content creators.
+            </p>
+            <div class="mt-10">
+                <a href="{{ url_for('register') }}" class="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-primary bg-white hover:bg-gray-50">
+                    Get Started
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Features Section -->
+    <div class="py-12 bg-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="lg:text-center">
+                <h2 class="text-base text-primary font-semibold tracking-wide uppercase">Features</h2>
+                <p class="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-gray-900 sm:text-4xl">
+                    Everything you need to create amazing content
+                </p>
             </div>
 
-            <!-- Layer Management -->
-            <div class="bg-white rounded-lg shadow p-6 lg:col-span-2">
-                <h2 class="text-xl font-semibold mb-4">Layer Management</h2>
-                <div id="layerList" class="space-y-4">
-                    <!-- Layers will be dynamically added here -->
-                </div>
-            </div>
+            <div class="mt-10">
+                <div class="space-y-10 md:space-y-0 md:grid md:grid-cols-2 md:gap-x-8 md:gap-y-10">
+                    <!-- AI-Powered Content Generation -->
+                    <div class="relative">
+                        <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-primary text-white">
+                            <i class="fas fa-magic"></i>
+                        </div>
+                        <div class="ml-16">
+                            <h3 class="text-lg leading-6 font-medium text-gray-900">AI-Powered Content Generation</h3>
+                            <p class="mt-2 text-base text-gray-500">
+                                Generate text and images using advanced AI models. Perfect for creating variations and exploring new ideas.
+                            </p>
+                        </div>
+                    </div>
 
-            <!-- Preview Section -->
-            <div class="bg-white rounded-lg shadow p-6 lg:col-span-3">
-                <h2 class="text-xl font-semibold mb-4">Preview</h2>
-                <div class="flex space-x-4 mb-4">
-                    <button class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" onclick="exportDocument('square')">Square (1080x1080)</button>
-                    <button class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" onclick="exportDocument('landscape')">Landscape (1920x1080)</button>
-                    <button class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" onclick="exportDocument('portrait')">Portrait (1080x1920)</button>
-                </div>
-                <div id="preview" class="border border-gray-300 rounded-lg p-4">
-                    <!-- Preview will be shown here -->
+                    <!-- Layer Management -->
+                    <div class="relative">
+                        <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-primary text-white">
+                            <i class="fas fa-layer-group"></i>
+                        </div>
+                        <div class="ml-16">
+                            <h3 class="text-lg leading-6 font-medium text-gray-900">Smart Layer Management</h3>
+                            <p class="mt-2 text-base text-gray-500">
+                                Easily manage and edit layers in your creative projects. Support for PSD and InDesign files.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Batch Processing -->
+                    <div class="relative">
+                        <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-primary text-white">
+                            <i class="fas fa-tasks"></i>
+                        </div>
+                        <div class="ml-16">
+                            <h3 class="text-lg leading-6 font-medium text-gray-900">Batch Processing</h3>
+                            <p class="mt-2 text-base text-gray-500">
+                                Process multiple files at once. Save time by automating repetitive tasks.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Template Management -->
+                    <div class="relative">
+                        <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-primary text-white">
+                            <i class="fas fa-file-alt"></i>
+                        </div>
+                        <div class="ml-16">
+                            <h3 class="text-lg leading-6 font-medium text-gray-900">Template Management</h3>
+                            <p class="mt-2 text-base text-gray-500">
+                                Create and manage templates for your projects. Share templates with your team.
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-</body>
-</html> 
+    <!-- CTA Section -->
+    <div class="bg-gray-50">
+        <div class="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:py-16 lg:px-8 lg:flex lg:items-center lg:justify-between">
+            <h2 class="text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl">
+                <span class="block">Ready to get started?</span>
+                <span class="block text-primary">Start creating amazing content today.</span>
+            </h2>
+            <div class="mt-8 flex lg:mt-0 lg:flex-shrink-0">
+                <div class="inline-flex rounded-md shadow">
+                    <a href="{{ url_for('register') }}" class="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-white bg-primary hover:bg-primary-dark">
+                        Get started
+                    </a>
+                </div>
+                <div class="ml-3 inline-flex rounded-md shadow">
+                    <a href="#" class="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-primary bg-white hover:bg-gray-50">
+                        Learn more
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
