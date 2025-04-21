@@ -34,6 +34,8 @@ load_dotenv()
 # Check for required environment variables
 secret_key = os.getenv('SECRET_KEY', 'dev-secret-key')
 database_url = os.getenv('DATABASE_URL', 'sqlite:///app.db')
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
 port = int(os.environ.get('PORT', 5000))
 
 logger.info(f"Starting application with database: {database_url}")
