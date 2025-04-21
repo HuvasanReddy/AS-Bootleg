@@ -259,19 +259,28 @@ def export_file(project_id, file_id):
     if not layer_data:
         return jsonify({'error': 'No layer data provided'}), 400
     
-    # Process the file with the new layer data
-    processor = DocumentProcessor()
-    original_file = os.path.join(app.config['UPLOAD_FOLDER'], project_file.filename)
-    export_filename = f"export_{project_file.filename}"
-    export_path = os.path.join(app.config['UPLOAD_FOLDER'], 'exports', export_filename)
-    
     try:
-        processor.export_file(original_file, export_path, layer_data)
-        return send_file(
-            export_path,
-            as_attachment=True,
-            download_name=project_file.original_filename
-        )
+        # Initialize LayerManager and load the document
+        lm = LayerManager()
+        lm.load_document(project_file.filepath)
+        
+        # Update layers with the provided data
+        for layer in layer_data:
+            if layer['id'] in lm._layers:
+                lm._layers[layer['id']].update(layer)
+        
+        # Export the document
+        result = lm.export_document(size='square', format='png')
+        
+        if result['success']:
+            return send_file(
+                result['path'],
+                as_attachment=True,
+                download_name=f"{project_file.original_filename.rsplit('.', 1)[0]}_export.png"
+            )
+        else:
+            return jsonify({'error': result.get('message', 'Export failed')}), 500
+            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
