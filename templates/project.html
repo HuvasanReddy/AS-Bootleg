@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} - Creative Automation Tool{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Project Header -->
+    <div class="bg-white rounded-lg shadow-md p-6">
+        <div class="flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">{{ project.name }}</h1>
+                <p class="text-gray-600">Created: {{ project.created_at.strftime('%Y-%m-%d') }}</p>
+            </div>
+            <div class="flex space-x-4">
+                <button onclick="exportProject()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                    Export
+                </button>
+                <button onclick="saveProject()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Layer Management -->
+        <div class="bg-white rounded-lg shadow-md p-6 lg:col-span-1">
+            <h2 class="text-xl font-semibold mb-4">Layers</h2>
+            <div id="layerList" class="space-y-4">
+                {% for layer in project.layers %}
+                    <div class="border rounded-lg p-4" data-layer-id="{{ layer.id }}">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="font-semibold">{{ layer.name }}</h3>
+                            <button onclick="toggleLayerLock('{{ layer.id }}')" class="text-gray-500 hover:text-gray-700">
+                                {{ '🔒' if layer.locked else '🔓' }}
+                            </button>
+                        </div>
+                        {% if layer.type == 'text' %}
+                            <textarea class="w-full p-2 border rounded" 
+                                      onchange="updateLayer('{{ layer.id }}', this.value, 'text')"
+                                      {{ 'disabled' if layer.locked else '' }}>
+                                {{ layer.text }}
+                            </textarea>
+                            <div class="mt-2 flex space-x-4">
+                                <div class="flex items-center space-x-2">
+                                    <label>Size:</label>
+                                    <input type="number" class="w-20 p-1 border rounded"
+                                           value="{{ layer.size }}"
+                                           onchange="updateLayer('{{ layer.id }}', { size: this.value }, 'text')"
+                                           {{ 'disabled' if layer.locked else '' }}>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <label>Color:</label>
+                                    <input type="color" class="w-8 h-8"
+                                           value="{{ layer.color }}"
+                                           onchange="updateLayer('{{ layer.id }}', { color: this.value }, 'text')"
+                                           {{ 'disabled' if layer.locked else '' }}>
+                                </div>
+                            </div>
+                        {% elif layer.type == 'image' %}
+                            <input type="file" class="w-full p-2 border rounded"
+                                   onchange="handleImageUpload('{{ layer.id }}', this.files[0])"
+                                   {{ 'disabled' if layer.locked else '' }}>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Preview Section -->
+        <div class="bg-white rounded-lg shadow-md p-6 lg:col-span-2">
+            <h2 class="text-xl font-semibold mb-4">Preview</h2>
+            <div class="flex space-x-4 mb-4">
+                <button onclick="updatePreview('square')" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                    Square (1080x1080)
+                </button>
+                <button onclick="updatePreview('landscape')" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                    Landscape (1920x1080)
+                </button>
+                <button onclick="updatePreview('portrait')" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
+                    Portrait (1080x1920)
+                </button>
+            </div>
+            <div id="preview" class="border border-gray-300 rounded-lg p-4">
+                <!-- Preview will be shown here -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const projectId = {{ project.id }};
+
+function toggleLayerLock(layerId) {
+    const layer = document.querySelector(`[data-layer-id="${layerId}"]`);
+    const inputs = layer.querySelectorAll('input, textarea');
+    const isLocked = inputs[0].disabled;
+    
+    inputs.forEach(input => {
+        input.disabled = !isLocked;
+    });
+}
+
+async function updateLayer(layerId, content, type) {
+    try {
+        const response = await fetch('/update-layer', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                layer_id: layerId,
+                content: content,
+                type: type,
+                project_id: projectId
+            })
+        });
+
+        const data = await response.json();
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+
+        updatePreview();
+    } catch (error) {
+        console.error('Error updating layer:', error);
+        alert('Error updating layer. Please try again.');
+    }
+}
+
+async function handleImageUpload(layerId, file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('/upload-image', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+
+        updateLayer(layerId, data.path, 'image');
+    } catch (error) {
+        console.error('Error uploading image:', error);
+        alert('Error uploading image. Please try again.');
+    }
+}
+
+async function updatePreview(size) {
+    try {
+        const response = await fetch('/export', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                size: size,
+                format: 'png',
+                project_id: projectId
+            })
+        });
+
+        const data = await response.json();
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+
+        const preview = document.getElementById('preview');
+        preview.innerHTML = `<img src="${data.path}" alt="Preview" class="max-w-full">`;
+    } catch (error) {
+        console.error('Error updating preview:', error);
+        alert('Error updating preview. Please try again.');
+    }
+}
+
+async function saveProject() {
+    try {
+        const response = await fetch(`/project/${projectId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+
+        alert('Project saved successfully!');
+    } catch (error) {
+        console.error('Error saving project:', error);
+        alert('Error saving project. Please try again.');
+    }
+}
+
+async function exportProject() {
+    try {
+        const response = await fetch(`/project/${projectId}/export`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+
+        // Create a temporary link to download the file
+        const link = document.createElement('a');
+        link.href = data.path;
+        link.download = `${project.name}_export.${data.format}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (error) {
+        console.error('Error exporting project:', error);
+        alert('Error exporting project. Please try again.');
+    }
+}
+</script>
+{% endblock %} 
