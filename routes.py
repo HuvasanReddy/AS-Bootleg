@@ -84,5 +84,49 @@ def register_routes(app):
                 "timestamp": datetime.utcnow().isoformat()
             }), 500
 
+    @app.route('/env-check')
+    def env_check():
+        """Diagnostic endpoint to check environment variables"""
+        try:
+            # List of environment variables to check
+            env_vars = {
+                'DATABASE_URL': os.getenv('DATABASE_URL'),
+                'POSTGRES_USER': os.getenv('POSTGRES_USER'),
+                'POSTGRES_DB': os.getenv('POSTGRES_DB'),
+                'RAILWAY_TCP_PROXY_DOMAIN': os.getenv('RAILWAY_TCP_PROXY_DOMAIN'),
+                'RAILWAY_TCP_PROXY_PORT': os.getenv('RAILWAY_TCP_PROXY_PORT'),
+                'PORT': os.getenv('PORT'),
+                'RAILWAY_ENVIRONMENT_NAME': os.getenv('RAILWAY_ENVIRONMENT_NAME'),
+                'RAILWAY_SERVICE_NAME': os.getenv('RAILWAY_SERVICE_NAME')
+            }
+
+            # Mask sensitive information
+            masked_vars = env_vars.copy()
+            if masked_vars.get('DATABASE_URL'):
+                parts = masked_vars['DATABASE_URL'].split('@')
+                if len(parts) > 1:
+                    masked_vars['DATABASE_URL'] = f"...@{parts[1]}"
+
+            # Check which variables are set
+            status = {
+                'missing_vars': [k for k, v in env_vars.items() if v is None],
+                'set_vars': [k for k, v in env_vars.items() if v is not None],
+                'values': masked_vars
+            }
+
+            return jsonify({
+                'status': 'ok' if not status['missing_vars'] else 'warning',
+                'environment': os.getenv('RAILWAY_ENVIRONMENT_NAME', 'unknown'),
+                'service': os.getenv('RAILWAY_SERVICE_NAME', 'unknown'),
+                'database_configured': bool(env_vars.get('DATABASE_URL')),
+                'environment_check': status
+            })
+        except Exception as e:
+            logger.error(f"Error checking environment variables: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': str(e)
+            }), 500
+
     # Add all your other routes here...
     # Copy the remaining routes from app.py 
