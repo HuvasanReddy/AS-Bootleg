@@ -66,17 +66,22 @@ def create_app():
     # Use DATABASE_URL from environment, or construct it from individual components
     database_url = os.getenv('DATABASE_URL')
     if not database_url:
-        # Construct URL from individual components
+        # Get Railway Postgres URL components
         db_user = os.getenv('POSTGRES_USER', 'postgres')
-        db_password = os.getenv('POSTGRES_PASSWORD', 'DuiDSlJeUZaMptWBSALYMzDlSHembYvi')
-        db_host = os.getenv('PGHOST', 'postgres-6sob.railway.internal')
-        db_port = os.getenv('PGPORT', '5432')
+        db_password = os.getenv('POSTGRES_PASSWORD')
+        db_host = os.getenv('RAILWAY_TCP_PROXY_DOMAIN', 'containers-us-west-34.railway.app')
+        db_port = os.getenv('RAILWAY_TCP_PROXY_PORT', '7386')
         db_name = os.getenv('POSTGRES_DB', 'railway')
-        database_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
-        logger.info(f"Constructed database URL from components (user: {db_user}, host: {db_host}, port: {db_port}, db: {db_name})")
+        
+        if not all([db_user, db_password, db_host, db_port, db_name]):
+            logger.warning("Some database configuration values are missing, using default SQLite database")
+            database_url = 'sqlite:///app.db'
+        else:
+            database_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
+            logger.info(f"Constructed database URL from Railway components (user: {db_user}, host: {db_host}, port: {db_port}, db: {db_name})")
 
     # Convert postgres:// to postgresql:// if necessary
-    if database_url.startswith("postgres://"):
+    if database_url and database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
         logger.info("Converted postgres:// to postgresql:// in database URL")
         
