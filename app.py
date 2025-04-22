@@ -66,7 +66,7 @@ def create_app():
     # Use DATABASE_URL from environment, or construct it from individual components
     database_url = os.getenv('DATABASE_URL')
     if not database_url:
-        # Get Railway Postgres URL components
+        # Construct URL from individual components
         db_user = os.getenv('POSTGRES_USER', 'postgres')
         db_password = os.getenv('POSTGRES_PASSWORD')
         db_host = os.getenv('RAILWAY_TCP_PROXY_DOMAIN', 'containers-us-west-34.railway.app')
@@ -107,7 +107,8 @@ def create_app():
         
     except Exception as e:
         logger.error(f"Error during initialization: {str(e)}")
-        raise
+        # Don't raise the error, let the app continue with reduced functionality
+        pass
 
     # Create upload directories
     try:
@@ -118,7 +119,8 @@ def create_app():
         logger.info("Upload directories created successfully")
     except Exception as e:
         logger.error(f"Error creating directories: {str(e)}")
-        raise
+        # Don't raise the error, let the app continue with reduced functionality
+        pass
 
     with app.app_context():
         # Import routes and models here to avoid circular imports
@@ -132,7 +134,8 @@ def create_app():
             logger.info("Database tables initialized successfully")
         except Exception as e:
             logger.error(f"Database initialization failed: {str(e)}")
-            raise
+            # Don't raise the error, let the app continue with reduced functionality
+            pass
 
     return app
 

@@ -5,7 +5,12 @@
     "buildCommand": "pip install -r requirements.txt"
   },
   "deploy": {
+    "numReplicas": 1,
+    "startCommand": "gunicorn --bind 0.0.0.0:$PORT app:app --log-level debug",
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
+    "restartPolicyMaxRetries": 10,
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 300,
+    "predeploy": "python -m flask db upgrade"
   }
 } 
